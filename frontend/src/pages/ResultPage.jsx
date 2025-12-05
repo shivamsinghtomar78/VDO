@@ -18,7 +18,6 @@ export default function ResultPage() {
 
   useEffect(() => {
       if (location.state?.resultData) {
-        console.log('✅ Found data in location.state')
         setResult(location.state.resultData)
         return
       }
@@ -26,32 +25,17 @@ export default function ResultPage() {
       const sampleMode = localStorage.getItem('sampleMode')
       const savedData = localStorage.getItem('resultData')
 
-      console.log('=== ResultPage useEffect ===')
-      console.log('Current URL:', window.location.pathname)
-      console.log('sampleMode:', sampleMode)
-      console.log('savedData exists:', !!savedData)
-      console.log('savedData length:', savedData?.length || 0)
-      console.log('localStorage keys:', Object.keys(localStorage))
-
       if (sampleMode) {
-        console.log('✅ Loading SAMPLE_DATA from sampleMode')
         setResult(SAMPLE_DATA)
         localStorage.removeItem('sampleMode')
       } else if (savedData) {
         try {
-          console.log('🔍 Parsing savedData from localStorage')
-          const parsed = JSON.parse(savedData)
-          console.log('✅ Parsed data successfully')
-          console.log('Parsed result:', parsed)
-          setResult(parsed)
+          setResult(JSON.parse(savedData))
           localStorage.removeItem('resultData')
-        } catch (error) {
-          console.error('❌ Failed to parse resultData:', error)
-          console.error('Raw savedData preview:', savedData?.substring(0, 200))
+        } catch {
           navigate('/')
         }
       } else {
-        console.log('❌ No user data found, redirecting to home')
         navigate('/')
       }
   }, [navigate, location])
