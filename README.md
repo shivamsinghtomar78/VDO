@@ -241,28 +241,18 @@ curl http://localhost:5000/api/status/job-id-here
 - Tablet: 768px+
 - Desktop: 1024px+
 
-## 🚀 Deployment
+## 🚀 Deployment on Render
 
-### Frontend
-```bash
-cd frontend
-npm run build
-# Deploy dist/ folder
-```
+Deploy entire app as single service:
 
-### Backend
-```bash
-cd backend
-npm install --production
-node server.js
-```
+1. Push to GitHub
+2. Create Web Service on Render
+3. Build: `npm run build`
+4. Start: `npm start`
+5. Add environment variables
+6. Deploy!
 
-### AI Service
-```bash
-cd ai-service
-pip install -r requirements.txt
-python main.py
-```
+See DEPLOYMENT.md for details.
 
 ## 📞 Support
 
