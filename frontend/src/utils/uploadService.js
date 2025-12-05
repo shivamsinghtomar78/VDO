@@ -37,10 +37,14 @@ async function uploadWithTimeout(file, onProgress) {
       signal: controller.signal
     })
 
+    if (!response.ok) {
+      throw new Error(`Upload failed with status ${response.status}`)
+    }
+
     const data = await response.json()
     
-    if (!response.ok) {
-      throw new Error(data.error || `Upload failed with status ${response.status}`)
+    if (!data) {
+      throw new Error('Empty response from server')
     }
     
     // Add fallback defaults for optional fields

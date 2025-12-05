@@ -53,7 +53,7 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 }
 })
 
-// API Routes
+// API Routes - MUST be before catch-all
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
@@ -92,18 +92,36 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
 
       res.json(finalResult)
     } catch (pythonError) {
+      console.error('Python service error:', pythonError.message)
       const mockResult = {
         jobId,
         status: 'completed',
-        transcript: 'Sample transcript',
-        blog: { title: 'Blog Title', sections: [{ heading: 'Introduction', content: 'Content...' }] },
-        seo: { title: 'SEO Title', metaDescription: 'Description', keywords: ['key1'], seoScore: 75, readabilityScore: 'Good' },
-        imageSuggestions: [],
+        transcript: 'Sample transcript from video processing',
+        blog: { 
+          title: 'Video Content Summary', 
+          sections: [
+            { heading: 'Introduction', content: 'This is a sample blog post generated from your video.' },
+            { heading: 'Main Points', content: 'Key insights and takeaways from the video content.' },
+            { heading: 'Conclusion', content: 'Summary and final thoughts.' }
+          ] 
+        },
+        seo: { 
+          title: 'Video Content Summary - Blog Post', 
+          metaDescription: 'Professional blog post generated from video content with SEO optimization', 
+          keywords: ['video', 'blog', 'content', 'summary'], 
+          seoScore: 85, 
+          readabilityScore: 'Excellent' 
+        },
+        imageSuggestions: [
+          { section: 'Introduction', prompt: 'Professional introduction header image' },
+          { section: 'Main Points', prompt: 'Infographic showing key points' }
+        ],
         isMockData: true
       }
       res.status(202).json(mockResult)
     }
   } catch (error) {
+    console.error('Upload error:', error.message)
     res.status(500).json({ error: 'Error processing video: ' + error.message })
   }
 })
@@ -112,8 +130,8 @@ app.get('/api/status/:jobId', (req, res) => {
   res.json({ jobId: req.params.jobId, status: 'completed' })
 })
 
-// Serve frontend
-app.get('*', (req, res) => {
+// Serve frontend - MUST be last
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'frontend/dist/index.html'))
 })
 
