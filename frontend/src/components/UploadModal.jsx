@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from './ui'
 import { LoadingOverlay } from './Loading'
@@ -7,6 +8,7 @@ import { uploadVideo } from '../utils/uploadService'
 import { useLoading } from '../utils/loadingContext.jsx'
 
 export default function UploadModal({ onClose, isOpen = false }) {
+  const navigate = useNavigate()
   const [dragActive, setDragActive] = useState(false)
   const [file, setFile] = useState(null)
   const toast = useToast()
@@ -58,10 +60,12 @@ export default function UploadModal({ onClose, isOpen = false }) {
     toast.info('📤 Uploading your video...')
     
     try {
-      console.log('Starting upload...')
+      console.log('🚀 Starting upload...')
       const data = await uploadVideo(file)
       
-      console.log('Upload successful, received data:', data)
+      console.log('✅ Upload successful, received data:', data)
+      console.log('📊 Data type:', typeof data)
+      console.log('📊 Data keys:', Object.keys(data))
       console.log('Data structure:', {
         hasJobId: !!data.jobId,
         hasStatus: !!data.status,
@@ -75,23 +79,30 @@ export default function UploadModal({ onClose, isOpen = false }) {
       console.log('JSON string length:', jsonString.length)
       console.log('Setting localStorage resultData...')
       
+      // Clear any previous data first
+      localStorage.removeItem('resultData')
+      localStorage.removeItem('sampleMode')
+      
+      // Set the new data
+      localStorage.setItem('resultData', jsonString)
+      
+      // Verify it was set
+      const verified = localStorage.getItem('resultData')
+      console.log('Verified localStorage - resultData exists:', !!verified)
+      console.log('Verified localStorage - resultData size:', verified?.length)
+      
       if (!data.isMockData) {
-        localStorage.setItem('resultData', jsonString)
-        localStorage.removeItem('sampleMode')
-        console.log('Verified localStorage - resultData size:', localStorage.getItem('resultData')?.length)
         toast.success('✅ Video processed successfully!')
       } else {
         toast.warning('⚠️ Using mock data - AI service unavailable')
-        localStorage.setItem('resultData', jsonString)
-        console.log('Set mock data to localStorage')
       }
       
-      console.log('Redirecting to /results in 500ms...')
-      setTimeout(() => {
-        console.log('Executing redirect to /results')
-        console.log('localStorage.resultData still exists:', !!localStorage.getItem('resultData'))
-        window.location.href = '/results'
-      }, 500)
+      // Navigate immediately without delay
+      console.log('Navigating to /results...')
+      console.log('localStorage.resultData before navigate:', !!localStorage.getItem('resultData'))
+      console.log('localStorage.resultData size:', localStorage.getItem('resultData')?.length)
+      stopLoading()
+      navigate('/results', { state: { resultData: data } })
     } catch (error) {
       console.error('Upload error:', error)
       console.error('Error stack:', error.stack)
@@ -107,7 +118,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      onClick={() => !isLoading && onClose()}
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 20 }}

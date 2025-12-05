@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
-import { MOCK_RESULT } from '../utils/mockData'
 
 export default function HeroPage() {
   const [showUpload, setShowUpload] = useState(false)
@@ -33,16 +32,6 @@ export default function HeroPage() {
             className="transform hover:scale-105"
           >
             🚀 Upload Your Video
-          </Button>
-          <Button
-            onClick={() => {
-              localStorage.setItem('resultData', JSON.stringify(MOCK_RESULT))
-              window.location.href = '/results'
-            }}
-            variant="secondary"
-            size="lg"
-          >
-            👀 View Sample Output
           </Button>
         </div>
       </motion.section>

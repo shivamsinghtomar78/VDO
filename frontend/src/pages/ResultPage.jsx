@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui'
 import { Navigation } from '../components/Layout'
@@ -14,46 +14,47 @@ export default function ResultPage() {
   const [expandedSection, setExpandedSection] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
-    const sampleMode = localStorage.getItem('sampleMode')
-    const savedData = localStorage.getItem('resultData')
-
-    console.log('ResultPage - useEffect triggered')
-    console.log('  - sampleMode:', sampleMode)
-    console.log('  - savedData exists:', !!savedData)
-    console.log('  - savedData length:', savedData?.length || 0)
-
-    if (sampleMode) {
-      console.log('Loading SAMPLE_DATA')
-      setResult(SAMPLE_DATA)
-      localStorage.removeItem('sampleMode')
-    } else if (savedData) {
-      try {
-        console.log('Parsing savedData from localStorage')
-        const parsed = JSON.parse(savedData)
-        console.log('Parsed data:', parsed)
-        setResult(parsed)
-        localStorage.removeItem('resultData')
-      } catch (error) {
-        console.error('Failed to parse resultData:', error)
-        console.error('Raw savedData:', savedData)
-        console.log('Using SAMPLE_DATA as fallback due to parse error')
-        setResult(SAMPLE_DATA)
+      if (location.state?.resultData) {
+        console.log('✅ Found data in location.state')
+        setResult(location.state.resultData)
+        return
       }
-    } else {
-      console.log('No savedData or sampleMode found in ResultPage')
-      console.log('Available localStorage keys:', Object.keys(localStorage))
       
-      // Set timeout to show sample data if real data doesn't arrive
-      const timeout = setTimeout(() => {
-        console.log('Timeout: No data found after 3 seconds, showing SAMPLE_DATA')
+      const sampleMode = localStorage.getItem('sampleMode')
+      const savedData = localStorage.getItem('resultData')
+
+      console.log('=== ResultPage useEffect ===')
+      console.log('Current URL:', window.location.pathname)
+      console.log('sampleMode:', sampleMode)
+      console.log('savedData exists:', !!savedData)
+      console.log('savedData length:', savedData?.length || 0)
+      console.log('localStorage keys:', Object.keys(localStorage))
+
+      if (sampleMode) {
+        console.log('✅ Loading SAMPLE_DATA from sampleMode')
         setResult(SAMPLE_DATA)
-      }, 3000)
-      
-      return () => clearTimeout(timeout)
-    }
-  }, [navigate])
+        localStorage.removeItem('sampleMode')
+      } else if (savedData) {
+        try {
+          console.log('🔍 Parsing savedData from localStorage')
+          const parsed = JSON.parse(savedData)
+          console.log('✅ Parsed data successfully')
+          console.log('Parsed result:', parsed)
+          setResult(parsed)
+          localStorage.removeItem('resultData')
+        } catch (error) {
+          console.error('❌ Failed to parse resultData:', error)
+          console.error('Raw savedData preview:', savedData?.substring(0, 200))
+          navigate('/')
+        }
+      } else {
+        console.log('❌ No user data found, redirecting to home')
+        navigate('/')
+      }
+  }, [navigate, location])
 
   if (!result) {
     return (

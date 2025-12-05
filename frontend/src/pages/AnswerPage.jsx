@@ -74,23 +74,12 @@ export default function AnswerPage() {
         setSelectedAnswer(generateAnswers(data)[0])
       } catch (error) {
         console.error('Error loading data:', error)
-        console.log('Using MOCK_RESULT as fallback')
-        setResult(MOCK_RESULT)
-        setAnswers(generateAnswers(MOCK_RESULT))
-        setSelectedAnswer(generateAnswers(MOCK_RESULT)[0])
+        console.log('No valid data, redirecting to home')
+        navigate('/')
       }
     } else {
-      console.log('No data found, showing MOCK_RESULT')
-      
-      // Set timeout to show mock data if real data doesn't arrive
-      const timeout = setTimeout(() => {
-        console.log('Timeout: No data found after 3 seconds, showing MOCK_RESULT')
-        setResult(MOCK_RESULT)
-        setAnswers(generateAnswers(MOCK_RESULT))
-        setSelectedAnswer(generateAnswers(MOCK_RESULT)[0])
-      }, 3000)
-      
-      return () => clearTimeout(timeout)
+      console.log('No data found, redirecting to home')
+      navigate('/')
     }
   }, [navigate])
 
