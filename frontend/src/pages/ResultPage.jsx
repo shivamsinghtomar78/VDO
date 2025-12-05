@@ -17,7 +17,9 @@ export default function ResultPage() {
   const location = useLocation()
 
   useEffect(() => {
+      console.log('ResultPage mounted, location.state:', location.state)
       if (location.state?.resultData) {
+        console.log('Setting result from location.state')
         setResult(location.state.resultData)
         return
       }

@@ -61,6 +61,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
     
     try {
       const data = await uploadVideo(file)
+      console.log('Upload successful, data:', data)
       
       if (!data.isMockData) {
         toast.success('✅ Video processed successfully!')
@@ -69,10 +70,10 @@ export default function UploadModal({ onClose, isOpen = false }) {
       }
       
       stopLoading()
+      console.log('Navigating to results with data:', data)
       navigate('/results', { state: { resultData: data } })
     } catch (error) {
-      console.error('Upload error:', error)
-      console.error('Error stack:', error.stack)
+      console.error('Upload error:', error.message)
       toast.error(`❌ ${error.message || 'Upload failed. Please try again.'}`)
       stopLoading()
     }

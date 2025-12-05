@@ -29,7 +29,7 @@ async function uploadWithTimeout(file, onProgress) {
     const formData = new FormData()
     formData.append('video', file)
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+    const apiUrl = import.meta.env.VITE_API_URL || '/api'
     
     const response = await fetch(`${apiUrl}/api/upload-video`, {
       method: 'POST',
