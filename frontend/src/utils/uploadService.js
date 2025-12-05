@@ -29,16 +29,20 @@ async function uploadWithTimeout(file, onProgress) {
     const formData = new FormData()
     formData.append('video', file)
 
-    const apiUrl = import.meta.env.VITE_API_URL || '/api'
+    const apiUrl = import.meta.env.VITE_API_URL || '/'
+    const uploadUrl = `${apiUrl}api/upload-video`
+    console.log('Uploading to:', uploadUrl)
     
-    const response = await fetch(`${apiUrl}/api/upload-video`, {
+    const response = await fetch(uploadUrl, {
       method: 'POST',
       body: formData,
       signal: controller.signal
     })
 
     if (!response.ok) {
-      throw new Error(`Upload failed with status ${response.status}`)
+      const errorText = await response.text()
+      console.error('Server error:', errorText)
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json()
@@ -66,8 +70,11 @@ async function uploadWithTimeout(file, onProgress) {
     }
     
     validateUploadResponse(enrichedData)
-    
+    console.log('Upload successful:', enrichedData)
     return enrichedData
+  } catch (error) {
+    console.error('Upload error:', error.message)
+    throw error
   } finally {
     clearTimeout(timeoutId)
   }

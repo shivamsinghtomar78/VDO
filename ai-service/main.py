@@ -5,57 +5,105 @@ from dotenv import load_dotenv
 import logging
 import requests
 import json
+import time
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
+ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY', '9b09c36cddf44b3297e0ff9d92a5e0a2')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:5000"])
+CORS(app, origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:5000", "*"])
 
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "message": "AI service is running"})
 
-def transcribe_with_deepgram(video_path: str) -> str:
+def transcribe_with_assemblyai(video_path: str) -> str:
     try:
+        logger.info(f"Starting AssemblyAI transcription for {video_path}")
+        
+        # Upload file to AssemblyAI
         with open(video_path, 'rb') as f:
-            video_data = f.read()
+            upload_response = requests.post(
+                'https://api.assemblyai.com/v2/upload',
+                headers={'Authorization': ASSEMBLYAI_API_KEY},
+                files={'file': f},
+                timeout=300
+            )
         
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen",
-            headers={
-                "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                "Content-Type": "application/octet-stream"
-            },
-            params={"model": "nova-2", "language": "en", "smart_format": "true"},
-            data=video_data,
-            timeout=300
-        )
-        
-        if response.status_code != 200:
-            logger.warning(f"Deepgram error {response.status_code}")
+        if upload_response.status_code != 200:
+            logger.warning(f"AssemblyAI upload error {upload_response.status_code}")
             return None
         
-        result = response.json()
-        try:
-            transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
-            if transcript:
+        audio_url = upload_response.json()['upload_url']
+        logger.info(f"File uploaded: {audio_url}")
+        
+        # Submit transcription job
+        transcript_request = {
+            'audio_url': audio_url,
+            'language_code': 'en'
+        }
+        
+        submit_response = requests.post(
+            'https://api.assemblyai.com/v2/transcript',
+            headers={'Authorization': ASSEMBLYAI_API_KEY},
+            json=transcript_request,
+            timeout=30
+        )
+        
+        if submit_response.status_code != 200:
+            logger.warning(f"AssemblyAI submit error {submit_response.status_code}")
+            return None
+        
+        transcript_id = submit_response.json()['id']
+        logger.info(f"Transcription job submitted: {transcript_id}")
+        
+        # Poll for completion
+        max_attempts = 120
+        attempt = 0
+        while attempt < max_attempts:
+            poll_response = requests.get(
+                f'https://api.assemblyai.com/v2/transcript/{transcript_id}',
+                headers={'Authorization': ASSEMBLYAI_API_KEY},
+                timeout=30
+            )
+            
+            if poll_response.status_code != 200:
+                logger.warning(f"AssemblyAI poll error {poll_response.status_code}")
+                return None
+            
+            result = poll_response.json()
+            status = result['status']
+            
+            if status == 'completed':
+                transcript = result['text']
                 logger.info(f"Transcription completed: {len(transcript)} chars")
                 return transcript
-        except (KeyError, IndexError):
-            logger.warning("Could not parse Deepgram response")
+            elif status == 'error':
+                logger.warning(f"Transcription error: {result.get('error')}")
+                return None
+            
+            logger.info(f"Transcription status: {status} (attempt {attempt + 1}/{max_attempts})")
+            attempt += 1
+            time.sleep(2)
+        
+        logger.warning("Transcription timeout")
         return None
+        
     except Exception as e:
         logger.warning(f"Transcription failed: {e}")
         return None
 
 def generate_summary_with_openrouter(transcript: str) -> dict:
     try:
+        if not OPENROUTER_API_KEY:
+            logger.warning("No OpenRouter API key, using mock data")
+            return None
+        
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -125,7 +173,7 @@ def process_video():
         
         logger.info(f"Processing: {filename} (Job: {job_id})")
         
-        transcript = transcribe_with_deepgram(video_path)
+        transcript = transcribe_with_assemblyai(video_path)
         if not transcript:
             transcript = "Sample video transcript for demonstration purposes."
             logger.info("Using default transcript")
@@ -155,7 +203,6 @@ def process_video():
         }
         
         logger.info(f"Completed: {job_id}")
-        logger.info(f"Result: blog={bool(result['blog'])}, seo={bool(result['seo'])}, images={len(result['imageSuggestions'])}")
         return jsonify(result), 200
         
     except Exception as e:
@@ -166,5 +213,6 @@ if __name__ == "__main__":
     print("\n" + "="*40)
     print("AI Service Started")
     print("Port: 8000")
+    print("AssemblyAI Transcription Enabled")
     print("="*40 + "\n")
     app.run(host="0.0.0.0", port=8000, debug=False)
