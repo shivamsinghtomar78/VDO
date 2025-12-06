@@ -171,6 +171,67 @@ app.get('/api/status/:jobId', (req, res) => {
   })
 })
 
+/**
+ * Process YouTube URL endpoint
+ * POST /api/youtube-url
+ */
+app.post('/api/youtube-url', async (req, res) => {
+  try {
+    const { youtubeUrl } = req.body
+
+    if (!youtubeUrl) {
+      return res.status(400).json({ error: 'No YouTube URL provided' })
+    }
+
+    const jobId = uuidv4()
+    console.log(`✓ YouTube URL received: ${youtubeUrl}`)
+    console.log(`✓ Job ID: ${jobId}`)
+
+    // Call Python service to process the YouTube URL
+    try {
+      const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-youtube`, {
+        jobId,
+        youtubeUrl
+      }, {
+        timeout: 120000 // 2 minute timeout for YouTube processing
+      })
+
+      console.log(`✓ YouTube processing completed for job ${jobId}`)
+      const result = response.data
+
+      // Ensure response has all required fields
+      const finalResult = {
+        jobId: result.jobId || jobId,
+        status: result.status || 'completed',
+        source: 'youtube',
+        videoId: result.videoId || '',
+        transcript: result.transcript || '',
+        blog: result.blog || { title: '', sections: [] },
+        seo: result.seo || {
+          title: '',
+          metaDescription: '',
+          keywords: [],
+          seoScore: 0,
+          readabilityScore: 0
+        },
+        imageSuggestions: result.imageSuggestions || [],
+        warnings: result.warnings || []
+      }
+
+      res.json(finalResult)
+    } catch (pythonError) {
+      console.error('Error calling Python service for YouTube:', pythonError.message)
+      res.status(500).json({
+        error: 'AI service unavailable for YouTube processing',
+        jobId
+      })
+    }
+  } catch (error) {
+    console.error('YouTube URL error:', error)
+    res.status(500).json({ error: 'Error processing YouTube URL: ' + error.message })
+  }
+})
+
 // Error handler for multer
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {

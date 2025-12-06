@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 import logging
 import requests
 import json
-import requests
+import re
+from youtube_transcript_api import YouTubeTranscriptApi
 
 load_dotenv()
 
@@ -362,6 +363,135 @@ def process_video():
         
     except Exception as e:
         error_msg = f"Processing error: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({"error": error_msg, "jobId": data.get('jobId')}), 500
+
+def extract_youtube_video_id(url: str) -> str:
+    """Extract video ID from various YouTube URL formats."""
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def transcribe_youtube(video_id: str) -> dict:
+    """Get transcript from YouTube video using youtube-transcript-api.
+    
+    Returns: {'success': bool, 'text': str, 'error': str or None}
+    """
+    try:
+        logger.info(f"Fetching YouTube transcript for video: {video_id}")
+        
+        # Try to get transcript (auto-generated or manual)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+        # Try to get English transcript first, then any available
+        transcript = None
+        try:
+            transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+        except:
+            # Get any available transcript and translate to English
+            for t in transcript_list:
+                transcript = t
+                break
+        
+        if not transcript:
+            return {'success': False, 'text': None, 'error': 'No transcript available for this video'}
+        
+        # Fetch the actual transcript text
+        transcript_data = transcript.fetch()
+        
+        # Combine all text segments
+        full_text = ' '.join([segment['text'] for segment in transcript_data])
+        
+        logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
+        return {'success': True, 'text': full_text, 'error': None}
+        
+    except Exception as e:
+        error_msg = f"YouTube transcript error: {str(e)}"
+        logger.error(error_msg)
+        return {'success': False, 'text': None, 'error': error_msg}
+
+@app.route('/api/process-youtube', methods=['POST'])
+def process_youtube():
+    """Process a YouTube video URL and generate blog content."""
+    try:
+        data = request.json
+        job_id = data.get('jobId')
+        youtube_url = data.get('youtubeUrl')
+        
+        logger.info(f"Processing YouTube URL: {youtube_url} (Job: {job_id})")
+        
+        # Extract video ID
+        video_id = extract_youtube_video_id(youtube_url)
+        if not video_id:
+            return jsonify({"error": "Invalid YouTube URL", "jobId": job_id}), 400
+        
+        logger.info(f"Extracted video ID: {video_id}")
+        
+        # Get transcript from YouTube
+        transcription_result = transcribe_youtube(video_id)
+        transcript = transcription_result.get('text')
+        transcription_warning = None
+        
+        if not transcription_result.get('success'):
+            transcription_warning = transcription_result.get('error')
+            logger.warning(f"YouTube transcription warning: {transcription_warning}")
+            transcript = "Transcript not available for this video"
+        
+        # Generate blog summary
+        blog_generation_result = generate_summary_with_openrouter(transcript)
+        blog_data = blog_generation_result.get('data')
+        generation_warning = None
+        
+        if not blog_generation_result.get('success'):
+            generation_warning = blog_generation_result.get('error')
+            logger.warning(f"Blog generation warning: {generation_warning}")
+            blog_data = generate_mock_blog()
+        
+        # Build response
+        seo_data = blog_data.get("seo", {})
+        result = {
+            "jobId": job_id,
+            "status": "completed",
+            "source": "youtube",
+            "videoId": video_id,
+            "transcript": transcript,
+            "blog": {
+                "title": blog_data.get("title", "Untitled"),
+                "sections": blog_data.get("sections", [])
+            },
+            "seo": {
+                "title": seo_data.get("title", "Blog Title"),
+                "metaDescription": seo_data.get("metaDescription", "Description"),
+                "keywords": seo_data.get("keywords", []),
+                "seoScore": seo_data.get("seoScore", 75),
+                "readabilityScore": seo_data.get("readabilityScore", "Good")
+            },
+            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []))
+        }
+        
+        # Add warnings if using fallbacks
+        warnings = []
+        if transcription_warning:
+            warnings.append(f"Transcription: {transcription_warning}")
+        if generation_warning:
+            warnings.append(f"Blog Generation: {generation_warning}")
+        
+        if warnings:
+            result["warnings"] = warnings
+            logger.info(f"YouTube processed with warnings: {warnings}")
+        else:
+            logger.info(f"✓ YouTube video processed successfully")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        error_msg = f"YouTube processing error: {str(e)}"
         logger.error(error_msg)
         return jsonify({"error": error_msg, "jobId": data.get('jobId')}), 500
 
