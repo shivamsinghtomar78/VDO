@@ -2,9 +2,18 @@
 
 echo "Starting VDO Application..."
 
-# Install Python dependencies
-echo "Installing Python dependencies..."
+# Navigate to ai-service directory
 cd ai-service
+
+# Create Python virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    echo "Creating Python virtual environment..."
+    python3 -m venv venv
+fi
+
+# Activate virtual environment and install dependencies
+echo "Installing Python dependencies..."
+source venv/bin/activate
 pip install -r requirements.txt
 
 # Start Python AI service in background
