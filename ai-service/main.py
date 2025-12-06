@@ -386,30 +386,35 @@ def transcribe_youtube(video_id: str) -> dict:
     try:
         logger.info(f"Fetching YouTube transcript for video: {video_id}")
         
-        # Try to get transcript (auto-generated or manual)
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        # Try to get English transcript first, then any available
-        transcript = None
+        # Try to get transcript using the simpler direct method first
         try:
-            transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
-        except:
-            # Get any available transcript and translate to English
+            transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'en-GB', 'hi', 'es', 'fr', 'de'])
+            full_text = ' '.join([segment['text'] for segment in transcript_data])
+            logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
+            return {'success': True, 'text': full_text, 'error': None}
+        except Exception as e1:
+            logger.warning(f"Direct transcript fetch failed: {str(e1)}")
+        
+        # Fallback: Try listing all transcripts and get any available
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Try to get any transcript (manual or auto-generated)
+            transcript = None
             for t in transcript_list:
                 transcript = t
+                logger.info(f"Found transcript: {t.language} (auto-generated: {t.is_generated})")
                 break
+            
+            if transcript:
+                transcript_data = transcript.fetch()
+                full_text = ' '.join([segment['text'] for segment in transcript_data])
+                logger.info(f"✓ YouTube transcript fetched (fallback): {len(full_text)} characters")
+                return {'success': True, 'text': full_text, 'error': None}
+        except Exception as e2:
+            logger.warning(f"Fallback transcript fetch failed: {str(e2)}")
         
-        if not transcript:
-            return {'success': False, 'text': None, 'error': 'No transcript available for this video'}
-        
-        # Fetch the actual transcript text
-        transcript_data = transcript.fetch()
-        
-        # Combine all text segments
-        full_text = ' '.join([segment['text'] for segment in transcript_data])
-        
-        logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
-        return {'success': True, 'text': full_text, 'error': None}
+        return {'success': False, 'text': None, 'error': 'No transcript available for this video. The video may have captions disabled.'}
         
     except Exception as e:
         error_msg = f"YouTube transcript error: {str(e)}"
