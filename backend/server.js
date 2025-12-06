@@ -29,6 +29,10 @@ app.use(cors({
 }))
 app.use(express.json())
 
+// Serve static files from the dist folder (after build)
+const distDir = path.join(__dirname, '..', 'dist')
+app.use(express.static(distDir))
+
 // Setup uploads directory
 const uploadsDir = path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) {
@@ -181,9 +185,14 @@ app.use((error, req, res, next) => {
   next()
 })
 
-// 404 handler
+// SPA fallback - serve index.html for any request that doesn't match API routes
 app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' })
+  const indexPath = path.join(distDir, 'index.html')
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath)
+  } else {
+    res.status(404).json({ error: 'Route not found' })
+  }
 })
 
 // Start server
