@@ -154,8 +154,10 @@ def generate_summary_with_openrouter(transcript: str) -> dict:
                 "model": "amazon/nova-2-lite-v1:free",
                 "messages": [{
                     "role": "user",
-                    "content": f"""Create a professional blog post from this transcript. Return ONLY valid JSON:
-{{"title":"Blog Title","sections":[{{"heading":"Section 1","content":"Content"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"]}},"imageSuggestions":[{{"section":"Section 1","prompt":"Image prompt"}}]}}
+                    "content": f"""Create a professional blog post from this transcript. Return ONLY valid JSON with no escape characters or special formatting:
+{{"title":"Blog Title","sections":[{{"heading":"Section 1","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"]}},"imageSuggestions":[{{"section":"Section 1","prompt":"Image prompt"}}]}}
+
+Important: Do not use backslashes or special escape sequences in your response.
 
 Transcript: {transcript[:2000]}"""
                 }],
@@ -172,12 +174,27 @@ Transcript: {transcript[:2000]}"""
         result = response.json()
         content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
         
+        # Clean up the content - remove problematic escape sequences
+        content = content.replace('\\"', '"').replace("\\'", "'")
+        # Remove invalid escape sequences by replacing backslash followed by non-escape chars
+        import re
+        content = re.sub(r'\\(?!["\\/bfnrtu])', '', content)
+        
         json_start = content.find('{')
         json_end = content.rfind('}') + 1
         if json_start >= 0 and json_end > json_start:
-            blog_data = json.loads(content[json_start:json_end])
-            logger.info('✓ Blog summary generated successfully')
-            return {'success': True, 'data': blog_data, 'error': None}
+            json_str = content[json_start:json_end]
+            try:
+                blog_data = json.loads(json_str)
+                logger.info('✓ Blog summary generated successfully')
+                return {'success': True, 'data': blog_data, 'error': None}
+            except json.JSONDecodeError as je:
+                # Try a more aggressive cleanup
+                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)  # Remove control chars
+                json_str = json_str.replace('\\n', ' ').replace('\\t', ' ')
+                blog_data = json.loads(json_str)
+                logger.info('✓ Blog summary generated successfully (with cleanup)')
+                return {'success': True, 'data': blog_data, 'error': None}
         
         error_msg = 'No valid JSON found in OpenRouter response'
         logger.error(error_msg)
