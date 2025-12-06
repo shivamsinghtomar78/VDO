@@ -12,8 +12,11 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY', 'b14ee76b46f44755b5a5d2b50a9c9203')
+ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+
+if not ASSEMBLYAI_API_KEY:
+    raise ValueError('ASSEMBLYAI_API_KEY not set in environment')
 
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
