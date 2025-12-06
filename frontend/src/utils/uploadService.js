@@ -29,7 +29,10 @@ async function uploadWithTimeout(file, onProgress) {
     const formData = new FormData()
     formData.append('video', file)
 
-    const apiUrl = import.meta.env.VITE_API_URL || '/'
+    let apiUrl = import.meta.env.VITE_API_URL || '/'
+    if (apiUrl && !apiUrl.endsWith('/')) {
+      apiUrl += '/'
+    }
     const uploadUrl = `${apiUrl}api/upload-video`
     console.log('Uploading to:', uploadUrl)
     
