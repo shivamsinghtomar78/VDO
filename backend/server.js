@@ -248,11 +248,18 @@ app.use((error, req, res, next) => {
 
 // SPA fallback - serve index.html for any request that doesn't match API routes
 app.use((req, res) => {
+  // If this is an API request that wasn't matched, return 404 JSON
+  if (req.path.startsWith('/api/')) {
+    console.log(`⚠️ Unmatched API route: ${req.method} ${req.path}`)
+    return res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` })
+  }
+
+  // For non-API routes, serve the SPA
   const indexPath = path.join(distDir, 'index.html')
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath)
   } else {
-    res.status(404).json({ error: 'Route not found' })
+    res.status(404).json({ error: 'Application not found' })
   }
 })
 
