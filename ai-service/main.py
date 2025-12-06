@@ -391,38 +391,79 @@ def transcribe_youtube(video_id: str) -> dict:
     
     Returns: {'success': bool, 'text': str, 'error': str or None}
     """
+    import time
+    
     try:
         logger.info(f"Fetching YouTube transcript for video: {video_id}")
         
-        # Try to get transcript using the simpler direct method first
-        try:
-            transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'en-GB', 'hi', 'es', 'fr', 'de'])
-            full_text = ' '.join([segment['text'] for segment in transcript_data])
-            logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
-            return {'success': True, 'text': full_text, 'error': None}
-        except Exception as e1:
-            logger.warning(f"Direct transcript fetch failed: {str(e1)}")
+        # Method 1: Try direct fetch with multiple language options
+        languages_to_try = [
+            ['en', 'en-US', 'en-GB'],
+            ['hi', 'hi-IN'],
+            ['en'],
+            ['es', 'fr', 'de', 'pt', 'ru', 'ja', 'ko', 'zh-Hans', 'zh-Hant']
+        ]
         
-        # Fallback: Try listing all transcripts and get any available
+        for langs in languages_to_try:
+            try:
+                transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+                full_text = ' '.join([segment['text'] for segment in transcript_data])
+                if full_text.strip():
+                    logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
+                    return {'success': True, 'text': full_text, 'error': None}
+            except Exception as e:
+                logger.debug(f"Attempt with {langs} failed: {str(e)}")
+                continue
+        
+        # Method 2: Try listing all available transcripts
         try:
+            time.sleep(1)  # Small delay to avoid rate limiting
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
-            # Try to get any transcript (manual or auto-generated)
-            transcript = None
-            for t in transcript_list:
-                transcript = t
-                logger.info(f"Found transcript: {t.language} (auto-generated: {t.is_generated})")
-                break
-            
-            if transcript:
-                transcript_data = transcript.fetch()
-                full_text = ' '.join([segment['text'] for segment in transcript_data])
-                logger.info(f"✓ YouTube transcript fetched (fallback): {len(full_text)} characters")
-                return {'success': True, 'text': full_text, 'error': None}
-        except Exception as e2:
-            logger.warning(f"Fallback transcript fetch failed: {str(e2)}")
+            for transcript in transcript_list:
+                logger.info(f"Found transcript: {transcript.language} (auto: {transcript.is_generated})")
+                try:
+                    transcript_data = transcript.fetch()
+                    full_text = ' '.join([segment['text'] for segment in transcript_data])
+                    if full_text.strip():
+                        logger.info(f"✓ YouTube transcript fetched (via list): {len(full_text)} characters")
+                        return {'success': True, 'text': full_text, 'error': None}
+                except Exception as fetch_err:
+                    logger.warning(f"Failed to fetch {transcript.language}: {str(fetch_err)}")
+                    
+                    # Try translating to English if it's a non-English transcript
+                    if not transcript.language.startswith('en'):
+                        try:
+                            translated = transcript.translate('en')
+                            transcript_data = translated.fetch()
+                            full_text = ' '.join([segment['text'] for segment in transcript_data])
+                            if full_text.strip():
+                                logger.info(f"✓ YouTube transcript fetched (translated): {len(full_text)} characters")
+                                return {'success': True, 'text': full_text, 'error': None}
+                        except Exception as trans_err:
+                            logger.warning(f"Translation failed: {str(trans_err)}")
+                    continue
+                    
+        except Exception as list_err:
+            logger.warning(f"List transcripts failed: {str(list_err)}")
         
-        return {'success': False, 'text': None, 'error': 'No transcript available for this video. The video may have captions disabled.'}
+        # Method 3: Try with generated transcripts specifically
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            generated = transcript_list.find_generated_transcript(['en', 'en-US', 'hi'])
+            transcript_data = generated.fetch()
+            full_text = ' '.join([segment['text'] for segment in transcript_data])
+            if full_text.strip():
+                logger.info(f"✓ YouTube transcript fetched (generated): {len(full_text)} characters")
+                return {'success': True, 'text': full_text, 'error': None}
+        except Exception as gen_err:
+            logger.warning(f"Generated transcript failed: {str(gen_err)}")
+        
+        return {
+            'success': False, 
+            'text': None, 
+            'error': 'Could not fetch transcript. YouTube may be blocking requests or video has no captions.'
+        }
         
     except Exception as e:
         error_msg = f"YouTube transcript error: {str(e)}"
