@@ -137,6 +137,32 @@ export default function ResultPage() {
               {result.blog.sections[0]?.content?.substring(0, 150)}...
             </p>
           </motion.div>
+          {result.warnings && result.warnings.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mb-4 p-4 rounded-lg bg-yellow-500/20 border border-yellow-500/50"
+            >
+              <p className="text-yellow-300 font-semibold mb-2">⚠️ Processing Warnings:</p>
+              <ul className="text-yellow-200 text-sm space-y-1">
+                {result.warnings.map((warning, idx) => (
+                  <li key={idx}>• {warning}</li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
+          {result.isMockData && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mb-4 p-4 rounded-lg bg-orange-500/20 border border-orange-500/50"
+            >
+              <p className="text-orange-300 font-semibold">ℹ️ Using Sample Data</p>
+              <p className="text-orange-200 text-sm">This is sample data. Configure API keys for real processing.</p>
+            </motion.div>
+          )}
           <div className="flex gap-3 flex-wrap">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/20 text-emerald-300 text-sm font-semibold border border-emerald-500/40">
               <span>✅</span>

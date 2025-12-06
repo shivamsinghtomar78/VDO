@@ -5,20 +5,32 @@ from dotenv import load_dotenv
 import logging
 import requests
 import json
-import assemblyai as aai
+import requests
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
+DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+FREEPIK_API_KEY = os.getenv('FREEPIK_API_KEY')
 
-if not ASSEMBLYAI_API_KEY:
-    raise ValueError('ASSEMBLYAI_API_KEY not set in environment')
+# Log available APIs on startup
+if DEEPGRAM_API_KEY:
+    logger.info('✓ Deepgram API key configured')
+else:
+    logger.warning('⚠ Deepgram API key NOT set - transcription will use mock data')
 
-aai.settings.api_key = ASSEMBLYAI_API_KEY
+if OPENROUTER_API_KEY:
+    logger.info('✓ OpenRouter API key configured')
+else:
+    logger.warning('⚠ OpenRouter API key NOT set - blog generation will use mock data')
+
+if FREEPIK_API_KEY:
+    logger.info('✓ Freepik API key configured')
+else:
+    logger.warning('⚠ Freepik API key NOT set - image suggestions will use mock data')
 
 app = Flask(__name__)
 CORS(app, origins=["*"])
@@ -27,28 +39,114 @@ CORS(app, origins=["*"])
 def health():
     return jsonify({"status": "ok"})
 
-def transcribe_with_assemblyai(video_path: str) -> str:
+@app.route('/debug', methods=['GET'])
+def debug():
+    backend_uploads = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'uploads')
+    files = []
+    if os.path.exists(backend_uploads):
+        files = os.listdir(backend_uploads)
+    
+    return jsonify({
+        "deepgram_key_present": bool(DEEPGRAM_API_KEY),
+        "openrouter_key_present": bool(OPENROUTER_API_KEY),
+        "freepik_key_present": bool(FREEPIK_API_KEY),
+        "backend_uploads_path": backend_uploads,
+        "backend_uploads_exists": os.path.exists(backend_uploads),
+        "files_in_uploads": files,
+        "current_dir": os.getcwd()
+    })
+
+def transcribe_with_deepgram(video_path: str) -> dict:
+    """Transcribe video using Deepgram API.
+    
+    Returns: {'success': bool, 'text': str, 'error': str or None}
+    """
+    if not DEEPGRAM_API_KEY:
+        logger.info('Deepgram not configured - using mock transcription')
+        return {'success': False, 'text': None, 'error': 'DEEPGRAM_API_KEY not set', 'mock': True}
+    
     try:
-        logger.info(f"Transcribing: {video_path}")
+        logger.info(f"Transcribing video: {video_path}")
         
-        config = aai.TranscriptionConfig(speech_models=["universal"])
-        transcript = aai.Transcriber(config=config).transcribe(video_path)
+        # Check if file exists and log file info
+        if not os.path.exists(video_path):
+            error_msg = f"Video file not found: {video_path}"
+            logger.error(error_msg)
+            # Try to find the file in backend/uploads
+            backend_uploads = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'uploads')
+            if os.path.exists(backend_uploads):
+                files = os.listdir(backend_uploads)
+                logger.error(f"Available files in backend/uploads: {files}")
+            return {'success': False, 'text': None, 'error': error_msg}
         
-        if transcript.status == "error":
-            logger.warning(f"Transcription error: {transcript.error}")
-            return None
+        file_size = os.path.getsize(video_path)
+        logger.info(f"File exists: {video_path} ({file_size} bytes)")
         
-        logger.info(f"Transcription completed: {len(transcript.text)} chars")
-        return transcript.text
+        with open(video_path, 'rb') as audio_file:
+            audio_data = audio_file.read()
+            logger.info(f"Read {len(audio_data)} bytes from video file")
+            
+            if len(audio_data) == 0:
+                error_msg = "Video file is empty"
+                logger.error(error_msg)
+                return {'success': False, 'text': None, 'error': error_msg}
+        
+        # Use Deepgram REST API directly
+        response = requests.post(
+            "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
+            headers={
+                "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                "Content-Type": "application/octet-stream"
+            },
+            data=audio_data,
+            timeout=300
+        )
+        
+        if response.status_code != 200:
+            error_msg = f"Deepgram API error: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        result = response.json()
+        
+        # Check if transcription was successful
+        if not result.get('results', {}).get('channels') or len(result['results']['channels']) == 0:
+            error_msg = f"No audio detected in video file. Duration: {result.get('metadata', {}).get('duration', 0)} seconds"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        if len(result['results']['channels'][0].get('alternatives', [])) == 0:
+            error_msg = "No transcription alternatives found - video may not contain speech"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        transcript_text = result['results']['channels'][0]['alternatives'][0]['transcript']
+        
+        if not transcript_text or transcript_text.strip() == "":
+            error_msg = "Transcription returned empty text - video may not contain audible speech"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        logger.info(f"✓ Transcription completed: {len(transcript_text)} characters")
+        return {'success': True, 'text': transcript_text, 'error': None}
         
     except Exception as e:
-        logger.warning(f"Transcription failed: {e}")
-        return None
+        error_msg = f"Deepgram transcription exception: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"Video path: {video_path}")
+        logger.error(f"API key present: {bool(DEEPGRAM_API_KEY)}")
+        return {'success': False, 'text': None, 'error': error_msg}
 
 def generate_summary_with_openrouter(transcript: str) -> dict:
+    """Generate blog summary using OpenRouter API.
+    
+    Returns: {'success': bool, 'data': dict or None, 'error': str or None}
+    """
+    if not OPENROUTER_API_KEY:
+        logger.info('OpenRouter not configured - using mock blog generation')
+        return {'success': False, 'data': None, 'error': 'OPENROUTER_API_KEY not set', 'mock': True}
+    
     try:
-        if not OPENROUTER_API_KEY:
-            return None
+        logger.info('Generating blog summary with OpenRouter')
         
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -72,19 +170,79 @@ Transcript: {transcript[:2000]}"""
         )
         
         if response.status_code != 200:
-            return None
+            error_msg = f"OpenRouter API error: {response.status_code} - {response.text[:200]}"
+            logger.error(error_msg)
+            return {'success': False, 'data': None, 'error': error_msg}
         
         result = response.json()
-        content = result['choices'][0]['message']['content']
+        content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
         
         json_start = content.find('{')
         json_end = content.rfind('}') + 1
         if json_start >= 0 and json_end > json_start:
-            return json.loads(content[json_start:json_end])
-        return None
+            blog_data = json.loads(content[json_start:json_end])
+            logger.info('✓ Blog summary generated successfully')
+            return {'success': True, 'data': blog_data, 'error': None}
+        
+        error_msg = 'No valid JSON found in OpenRouter response'
+        logger.error(error_msg)
+        return {'success': False, 'data': None, 'error': error_msg}
     except Exception as e:
-        logger.warning(f"Summary generation failed: {e}")
-        return None
+        error_msg = f"Blog generation exception: {str(e)}"
+        logger.error(error_msg)
+        return {'success': False, 'data': None, 'error': error_msg}
+
+def generate_image_suggestions(sections: list) -> list:
+    """Generate image suggestions using Freepik API."""
+    if not FREEPIK_API_KEY or not sections:
+        return [
+            {"section": "Introduction", "prompt": "Professional header image"},
+            {"section": "Main Content", "prompt": "Content illustration"}
+        ]
+    
+    try:
+        suggestions = []
+        for section in sections[:3]:
+            heading = section.get('heading', 'Content')
+            
+            # Simple search terms
+            search_terms = ["business", "technology", "professional", "modern"]
+            query = search_terms[len(suggestions) % len(search_terms)]
+            
+            response = requests.get(
+                f"https://api.freepik.com/v1/resources",
+                headers={'x-freepik-api-key': FREEPIK_API_KEY},
+                params={'query': query, 'limit': 1},
+                timeout=10
+            )
+            
+            logger.info(f"Freepik API response: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Freepik data: {data}")
+                suggestions.append({
+                    "section": heading,
+                    "prompt": f"Professional image for {heading}"
+                })
+            else:
+                logger.error(f"Freepik error: {response.status_code} - {response.text}")
+                suggestions.append({
+                    "section": heading,
+                    "prompt": f"Image for {heading}"
+                })
+        
+        return suggestions if suggestions else [
+            {"section": "Introduction", "prompt": "Professional header"},
+            {"section": "Content", "prompt": "Main illustration"}
+        ]
+        
+    except Exception as e:
+        logger.error(f"Image suggestion error: {e}")
+        return [
+            {"section": "Introduction", "prompt": "Professional header"},
+            {"section": "Content", "prompt": "Main illustration"}
+        ]
 
 def generate_mock_blog() -> dict:
     return {
@@ -114,16 +272,48 @@ def process_video():
         job_id = data.get('jobId')
         video_path = data.get('videoPath')
         
-        logger.info(f"Processing: {video_path}")
+        logger.info(f"Processing video: {video_path} (Job: {job_id})")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Video path is absolute: {os.path.isabs(video_path)}")
         
-        transcript = transcribe_with_assemblyai(video_path)
-        if not transcript:
-            transcript = "Sample transcript"
+        # Convert relative path to absolute path if needed
+        if not os.path.isabs(video_path):
+            # If path is relative, assume it's relative to backend directory
+            backend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend')
+            video_path = os.path.join(backend_dir, video_path)
+            logger.info(f"Converted to absolute path: {video_path}")
         
-        blog_data = generate_summary_with_openrouter(transcript)
-        if not blog_data:
-            blog_data = generate_mock_blog()
+        # Normalize path separators
+        video_path = os.path.normpath(video_path)
+        logger.info(f"Normalized path: {video_path}")
         
+        # Step 1: Transcribe video
+        transcription_result = transcribe_with_deepgram(video_path)
+        transcript = transcription_result.get('text')
+        transcription_warning = None
+        
+        if not transcription_result.get('success'):
+            transcription_warning = transcription_result.get('error')
+            logger.warning(f"Transcription warning: {transcription_warning}")
+            if transcription_result.get('mock'):
+                transcript = "Sample transcript (Deepgram API not configured)"
+            else:
+                transcript = "Sample transcript (transcription failed)"
+        
+        # Step 2: Generate blog summary
+        blog_generation_result = generate_summary_with_openrouter(transcript)
+        blog_data = blog_generation_result.get('data')
+        generation_warning = None
+        
+        if not blog_generation_result.get('success'):
+            generation_warning = blog_generation_result.get('error')
+            logger.warning(f"Blog generation warning: {generation_warning}")
+            if blog_generation_result.get('mock'):
+                blog_data = generate_mock_blog()
+            else:
+                blog_data = generate_mock_blog()
+        
+        # Build response
         seo_data = blog_data.get("seo", {})
         result = {
             "jobId": job_id,
@@ -140,14 +330,28 @@ def process_video():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": blog_data.get("imageSuggestions", [])
+            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []))
         }
+        
+        # Add warnings if using fallbacks
+        warnings = []
+        if transcription_warning:
+            warnings.append(f"Transcription: {transcription_warning}")
+        if generation_warning:
+            warnings.append(f"Blog Generation: {generation_warning}")
+        
+        if warnings:
+            result["warnings"] = warnings
+            logger.info(f"Processed with warnings: {warnings}")
+        else:
+            logger.info(f"✓ Video processed successfully")
         
         return jsonify(result), 200
         
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_msg = f"Processing error: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({"error": error_msg, "jobId": data.get('jobId')}), 500
 
 if __name__ == "__main__":
     print("\nAI Service Started - Port 8000\n")

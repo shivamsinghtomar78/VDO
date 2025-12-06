@@ -63,10 +63,15 @@ export default function UploadModal({ onClose, isOpen = false }) {
       const data = await uploadVideo(file)
       console.log('Upload successful, data:', data)
       
-      if (!data.isMockData) {
-        toast.success('✅ Video processed successfully!')
-      } else {
+      // Show warning if using mock/fallback data
+      if (data.isMockData) {
         toast.warning('⚠️ Using mock data - AI service unavailable')
+      } else if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach(warning => {
+          toast.warning(`⚠️ ${warning}`)
+        })
+      } else {
+        toast.success('✅ Video processed successfully!')
       }
       
       stopLoading()

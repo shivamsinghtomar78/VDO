@@ -65,11 +65,19 @@ async function uploadWithTimeout(file, onProgress) {
         readabilityScore: data.seo?.readabilityScore || 'Good'
       },
       imageSuggestions: data.imageSuggestions || [],
-      transcript: data.transcript || 'Transcript not available'
+      transcript: data.transcript || 'Transcript not available',
+      warnings: data.warnings || [],
+      isMockData: data.isMockData || false
     }
     
     validateUploadResponse(enrichedData)
     console.log('Upload successful:', enrichedData)
+    
+    // Log warnings if present
+    if (enrichedData.warnings && enrichedData.warnings.length > 0) {
+      console.warn('Processing warnings:', enrichedData.warnings)
+    }
+    
     return enrichedData
   } catch (error) {
     console.error('Upload error:', error.message)

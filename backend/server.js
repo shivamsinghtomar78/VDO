@@ -128,12 +128,12 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       console.log('  - transcript length:', finalResult.transcript.length)
       console.log('Response data:', JSON.stringify(finalResult).substring(0, 300))
       
-      // Clean up uploaded file after processing
-      try {
-        fs.unlinkSync(videoPath)
-      } catch (e) {
-        console.warn('Could not delete uploaded file:', e.message)
-      }
+      // Keep file for debugging - comment out cleanup
+      // try {
+      //   fs.unlinkSync(videoPath)
+      // } catch (e) {
+      //   console.warn('Could not delete uploaded file:', e.message)
+      // }
       
       res.json(finalResult)
     } catch (pythonError) {
