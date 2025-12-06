@@ -98,27 +98,27 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       })
 
       console.log(`✓ Processing completed for job ${jobId}`)
-      
+
       // Parse response from Python service
       const result = response.data
       console.log('Raw Python response:', JSON.stringify(result).substring(0, 200))
-      
+
       // Ensure response has all required fields
       const finalResult = {
         jobId: result.jobId || jobId,
         status: result.status || 'completed',
         transcript: result.transcript || '',
         blog: result.blog || { title: '', sections: [] },
-        seo: result.seo || { 
-          title: '', 
-          metaDescription: '', 
+        seo: result.seo || {
+          title: '',
+          metaDescription: '',
           keywords: [],
           seoScore: 0,
           readabilityScore: 0
         },
         imageSuggestions: result.imageSuggestions || []
       }
-      
+
       console.log('Response data structure:')
       console.log('  - jobId:', !!finalResult.jobId)
       console.log('  - status:', finalResult.status)
@@ -127,14 +127,7 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       console.log('  - seo.title:', !!finalResult.seo.title)
       console.log('  - transcript length:', finalResult.transcript.length)
       console.log('Response data:', JSON.stringify(finalResult).substring(0, 300))
-      
-      // Keep file for debugging - comment out cleanup
-      // try {
-      //   fs.unlinkSync(videoPath)
-      // } catch (e) {
-      //   console.warn('Could not delete uploaded file:', e.message)
-      // }
-      
+
       res.json(finalResult)
     } catch (pythonError) {
       console.error('Error calling Python service:', pythonError.message)
@@ -143,6 +136,16 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       mockResult.warning = 'AI service unavailable - using mock data'
       console.log(`⚠ Returning mock data for job ${jobId}`)
       res.status(202).json(mockResult)
+    } finally {
+      // Clean up uploaded file
+      try {
+        if (fs.existsSync(videoPath)) {
+          fs.unlinkSync(videoPath)
+          console.log(`✓ Cleaned up file: ${req.file.filename}`)
+        }
+      } catch (e) {
+        console.warn('Could not delete uploaded file:', e.message)
+      }
     }
   } catch (error) {
     console.error('Upload error:', error)
@@ -157,8 +160,8 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
 app.get('/api/status/:jobId', (req, res) => {
   const { jobId } = req.params
   // In a real app, this would check a database or queue
-  res.json({ 
-    jobId, 
+  res.json({
+    jobId,
     status: 'completed',
     message: 'Video processing completed'
   })

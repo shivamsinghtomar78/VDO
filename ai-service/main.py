@@ -82,25 +82,20 @@ def transcribe_with_deepgram(video_path: str) -> dict:
         file_size = os.path.getsize(video_path)
         logger.info(f"File exists: {video_path} ({file_size} bytes)")
         
+        # Stream file to Deepgram instead of reading into memory
         with open(video_path, 'rb') as audio_file:
-            audio_data = audio_file.read()
-            logger.info(f"Read {len(audio_data)} bytes from video file")
+            logger.info(f"Streaming video file to Deepgram: {video_path}")
             
-            if len(audio_data) == 0:
-                error_msg = "Video file is empty"
-                logger.error(error_msg)
-                return {'success': False, 'text': None, 'error': error_msg}
-        
-        # Use Deepgram REST API directly
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
-            headers={
-                "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                "Content-Type": "application/octet-stream"
-            },
-            data=audio_data,
-            timeout=300
-        )
+            # Use Deepgram REST API directly
+            response = requests.post(
+                "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
+                headers={
+                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                    "Content-Type": "application/octet-stream"
+                },
+                data=audio_file,
+                timeout=300
+            )
         
         if response.status_code != 200:
             error_msg = f"Deepgram API error: {response.status_code} - {response.text}"
