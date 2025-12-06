@@ -176,26 +176,34 @@ Transcript: {transcript[:2000]}"""
         content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
         
         # Clean up the content - remove problematic escape sequences
+        import re
         content = content.replace('\\"', '"').replace("\\'", "'")
         # Remove invalid escape sequences by replacing backslash followed by non-escape chars
-        import re
         content = re.sub(r'\\(?!["\\/bfnrtu])', '', content)
         
         json_start = content.find('{')
         json_end = content.rfind('}') + 1
         if json_start >= 0 and json_end > json_start:
             json_str = content[json_start:json_end]
-            try:
-                blog_data = json.loads(json_str)
-                logger.info('✓ Blog summary generated successfully')
-                return {'success': True, 'data': blog_data, 'error': None}
-            except json.JSONDecodeError as je:
-                # Try a more aggressive cleanup
-                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)  # Remove control chars
-                json_str = json_str.replace('\\n', ' ').replace('\\t', ' ')
-                blog_data = json.loads(json_str)
-                logger.info('✓ Blog summary generated successfully (with cleanup)')
-                return {'success': True, 'data': blog_data, 'error': None}
+            
+            # Try multiple parsing strategies
+            parse_attempts = [
+                lambda s: json.loads(s),  # Direct parse
+                lambda s: json.loads(re.sub(r'[\x00-\x1f\x7f-\x9f]', '', s)),  # Remove control chars
+                lambda s: json.loads(s.replace('\\n', ' ').replace('\\t', ' ')),  # Fix newlines
+                lambda s: json.loads(re.sub(r',\s*}', '}', re.sub(r',\s*]', ']', s))),  # Fix trailing commas
+            ]
+            
+            for i, parse_fn in enumerate(parse_attempts):
+                try:
+                    blog_data = parse_fn(json_str)
+                    logger.info(f'✓ Blog summary generated successfully (parse attempt {i+1})')
+                    return {'success': True, 'data': blog_data, 'error': None}
+                except json.JSONDecodeError:
+                    continue
+            
+            # All parsing attempts failed - log the problematic JSON
+            logger.error(f'Failed to parse JSON after all attempts. First 500 chars: {json_str[:500]}')
         
         error_msg = 'No valid JSON found in OpenRouter response'
         logger.error(error_msg)
