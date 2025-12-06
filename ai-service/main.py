@@ -7,6 +7,7 @@ import requests
 import json
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
+import assemblyai as aai
 
 load_dotenv()
 
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 FREEPIK_API_KEY = os.getenv('FREEPIK_API_KEY')
+ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY', '9b09c36cddf44b3297e0ff9d92a5e0a2')
+
+# Configure AssemblyAI
+aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 # Log available APIs on startup
 if DEEPGRAM_API_KEY:
@@ -33,12 +38,66 @@ if FREEPIK_API_KEY:
 else:
     logger.warning('⚠ Freepik API key NOT set - image suggestions will use mock data')
 
+if ASSEMBLYAI_API_KEY:
+    logger.info('✓ AssemblyAI API key configured')
+else:
+    logger.warning('⚠ AssemblyAI API key NOT set')
+
 app = Flask(__name__)
 CORS(app, origins=["*"])
 
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"})
+
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    """Get available blog templates."""
+    templates = []
+    for key, value in BLOG_TEMPLATES.items():
+        templates.append({
+            "id": key,
+            "name": value["name"],
+            "description": value["structure"]
+        })
+    return jsonify({"templates": templates})
+
+@app.route('/api/export', methods=['POST'])
+def export_blog():
+    """Export blog content in various formats."""
+    try:
+        data = request.json
+        blog_data = data.get('blog', {})
+        export_format = data.get('format', 'markdown').lower()
+        
+        if export_format == 'markdown':
+            content = export_to_markdown(blog_data)
+            return jsonify({"format": "markdown", "content": content, "extension": ".md"})
+        elif export_format == 'html':
+            content = export_to_html(blog_data)
+            return jsonify({"format": "html", "content": content, "extension": ".html"})
+        elif export_format == 'wordpress':
+            content = export_to_wordpress(blog_data)
+            return jsonify({"format": "wordpress", "content": content, "extension": ".json"})
+        else:
+            return jsonify({"error": f"Unknown format: {export_format}"}), 400
+            
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/social-snippets', methods=['POST'])
+def get_social_snippets():
+    """Generate social media snippets from blog content."""
+    try:
+        data = request.json
+        blog_data = data.get('blog', {})
+        snippets = generate_social_snippets(blog_data)
+        return jsonify({"snippets": snippets})
+    except Exception as e:
+        logger.error(f"Social snippets error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/debug', methods=['GET'])
 def debug():
@@ -132,7 +191,89 @@ def transcribe_with_deepgram(video_path: str) -> dict:
         logger.error(f"API key present: {bool(DEEPGRAM_API_KEY)}")
         return {'success': False, 'text': None, 'error': error_msg}
 
-def generate_summary_with_openrouter(transcript: str) -> dict:
+def transcribe_with_assemblyai(video_path: str) -> dict:
+    """Transcribe video using AssemblyAI API.
+    
+    Returns: {'success': bool, 'text': str, 'error': str or None}
+    """
+    if not ASSEMBLYAI_API_KEY:
+        logger.info('AssemblyAI not configured')
+        return {'success': False, 'text': None, 'error': 'ASSEMBLYAI_API_KEY not set'}
+    
+    try:
+        logger.info(f"Transcribing video with AssemblyAI: {video_path}")
+        
+        # Check if file exists
+        if not os.path.exists(video_path):
+            error_msg = f"Video file not found: {video_path}"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        file_size = os.path.getsize(video_path)
+        logger.info(f"File exists: {video_path} ({file_size} bytes)")
+        
+        # Create transcriber
+        transcriber = aai.Transcriber()
+        
+        # Transcribe the file
+        transcript = transcriber.transcribe(video_path)
+        
+        if transcript.status == aai.TranscriptStatus.error:
+            error_msg = f"AssemblyAI error: {transcript.error}"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        transcript_text = transcript.text
+        
+        if not transcript_text or transcript_text.strip() == "":
+            error_msg = "Transcription returned empty text"
+            logger.error(error_msg)
+            return {'success': False, 'text': None, 'error': error_msg}
+        
+        logger.info(f"✓ AssemblyAI transcription completed: {len(transcript_text)} characters")
+        return {'success': True, 'text': transcript_text, 'error': None}
+        
+    except Exception as e:
+        error_msg = f"AssemblyAI transcription exception: {str(e)}"
+        logger.error(error_msg)
+        return {'success': False, 'text': None, 'error': error_msg}
+
+
+# Blog Style Templates
+BLOG_TEMPLATES = {
+    "standard": {
+        "name": "Standard Blog Post",
+        "prompt": "Create a professional blog post from this transcript.",
+        "structure": "Introduction, main content sections, and conclusion"
+    },
+    "tutorial": {
+        "name": "Step-by-Step Tutorial",
+        "prompt": "Create a step-by-step tutorial guide from this transcript. Include numbered steps, prerequisites, and tips.",
+        "structure": "Prerequisites, Step-by-step instructions, Tips, Conclusion"
+    },
+    "listicle": {
+        "name": "Listicle (Top N List)",
+        "prompt": "Create an engaging listicle-style article from this transcript. Use numbered points with catchy subheadings.",
+        "structure": "Introduction, Numbered list items with explanations, Conclusion"
+    },
+    "howto": {
+        "name": "How-To Guide",
+        "prompt": "Create a practical how-to guide from this transcript. Focus on actionable advice and clear instructions.",
+        "structure": "Problem statement, Solution overview, Detailed steps, FAQs"
+    },
+    "opinion": {
+        "name": "Opinion/Analysis Piece",
+        "prompt": "Create an analytical opinion piece from this transcript. Include insights, perspectives, and supporting arguments.",
+        "structure": "Thesis, Analysis sections, Counter-arguments, Conclusion"
+    },
+    "news": {
+        "name": "News Article",
+        "prompt": "Create a news-style article from this transcript. Use inverted pyramid structure with key facts first.",
+        "structure": "Headline, Lead paragraph, Supporting details, Background"
+    }
+}
+
+def generate_summary_with_openrouter(transcript: str, template: str = "standard") -> dict:
     """Generate blog summary using OpenRouter API.
     
     Returns: {'success': bool, 'data': dict or None, 'error': str or None}
@@ -141,8 +282,13 @@ def generate_summary_with_openrouter(transcript: str) -> dict:
         logger.info('OpenRouter not configured - using mock blog generation')
         return {'success': False, 'data': None, 'error': 'OPENROUTER_API_KEY not set', 'mock': True}
     
+    # Get template configuration
+    template_config = BLOG_TEMPLATES.get(template, BLOG_TEMPLATES["standard"])
+    template_prompt = template_config["prompt"]
+    template_structure = template_config["structure"]
+    
     try:
-        logger.info('Generating blog summary with OpenRouter')
+        logger.info(f'Generating blog summary with OpenRouter (template: {template})')
         
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -155,12 +301,14 @@ def generate_summary_with_openrouter(transcript: str) -> dict:
                 "model": "amazon/nova-2-lite-v1:free",
                 "messages": [{
                     "role": "user",
-                    "content": f"""Create a professional blog post from this transcript. Return ONLY valid JSON with no escape characters or special formatting:
-{{"title":"Blog Title","sections":[{{"heading":"Section 1","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"]}},"imageSuggestions":[{{"section":"Section 1","prompt":"Image prompt"}}]}}
+                    "content": f"""{template_prompt} Structure it as: {template_structure}
+
+Return ONLY valid JSON with no escape characters or special formatting:
+{{"title":"Blog Title","sections":[{{"heading":"Section 1","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"],"seoScore":85,"readabilityScore":"Good"}}}}
 
 Important: Do not use backslashes or special escape sequences in your response.
 
-Transcript: {transcript[:2000]}"""
+Transcript: {transcript[:3000]}"""
                 }],
                 "temperature": 0.7,
             },
@@ -213,56 +361,82 @@ Transcript: {transcript[:2000]}"""
         logger.error(error_msg)
         return {'success': False, 'data': None, 'error': error_msg}
 
-def generate_image_suggestions(sections: list) -> list:
-    """Generate image suggestions using Freepik API."""
+def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
+    """Generate image suggestions using Freepik API with contextual prompts."""
     if not FREEPIK_API_KEY or not sections:
         return [
-            {"section": "Introduction", "prompt": "Professional header image"},
-            {"section": "Main Content", "prompt": "Content illustration"}
+            {"section": "Introduction", "prompt": "Professional header image", "imageUrl": None},
+            {"section": "Main Content", "prompt": "Content illustration", "imageUrl": None}
         ]
+    
+    def extract_keywords(text: str) -> str:
+        """Extract meaningful keywords from text for image search."""
+        # Remove common words and extract key terms
+        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                     'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+                     'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
+                     'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
+                     'into', 'through', 'during', 'before', 'after', 'above', 'below',
+                     'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down',
+                     'this', 'that', 'these', 'those', 'it', 'its', 'they', 'their',
+                     'we', 'our', 'you', 'your', 'i', 'my', 'he', 'she', 'him', 'her'}
+        
+        words = text.lower().split()
+        keywords = [w for w in words if len(w) > 3 and w not in stop_words]
+        return ' '.join(keywords[:5])
     
     try:
         suggestions = []
-        for section in sections[:3]:
+        for i, section in enumerate(sections[:4]):
             heading = section.get('heading', 'Content')
+            content = section.get('content', '')
             
-            # Simple search terms
-            search_terms = ["business", "technology", "professional", "modern"]
-            query = search_terms[len(suggestions) % len(search_terms)]
+            # Generate contextual search query
+            if content:
+                query = extract_keywords(heading + ' ' + content)
+            else:
+                query = extract_keywords(heading)
+            
+            if not query:
+                query = "professional business"
+            
+            logger.info(f"Searching Freepik for: {query}")
             
             response = requests.get(
                 f"https://api.freepik.com/v1/resources",
                 headers={'x-freepik-api-key': FREEPIK_API_KEY},
-                params={'query': query, 'limit': 1},
+                params={'query': query, 'limit': 1, 'filters[content_type][photo]': 1},
                 timeout=10
             )
             
             logger.info(f"Freepik API response: {response.status_code}")
             
+            image_url = None
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Freepik data: {data}")
-                suggestions.append({
-                    "section": heading,
-                    "prompt": f"Professional image for {heading}"
-                })
-            else:
-                logger.error(f"Freepik error: {response.status_code} - {response.text}")
-                suggestions.append({
-                    "section": heading,
-                    "prompt": f"Image for {heading}"
-                })
+                if data.get('data') and len(data['data']) > 0:
+                    resource = data['data'][0]
+                    image_info = resource.get('image', {}).get('source', {})
+                    image_url = image_info.get('url')
+                    logger.info(f"Found image URL: {image_url}")
+            
+            suggestions.append({
+                "section": heading,
+                "prompt": f"AI-suggested image for: {query}",
+                "imageUrl": image_url,
+                "searchQuery": query
+            })
         
         return suggestions if suggestions else [
-            {"section": "Introduction", "prompt": "Professional header"},
-            {"section": "Content", "prompt": "Main illustration"}
+            {"section": "Introduction", "prompt": "Professional header", "imageUrl": None},
+            {"section": "Content", "prompt": "Main illustration", "imageUrl": None}
         ]
         
     except Exception as e:
         logger.error(f"Image suggestion error: {e}")
         return [
-            {"section": "Introduction", "prompt": "Professional header"},
-            {"section": "Content", "prompt": "Main illustration"}
+            {"section": "Introduction", "prompt": "Professional header", "imageUrl": None},
+            {"section": "Content", "prompt": "Main illustration", "imageUrl": None}
         ]
 
 def generate_mock_blog() -> dict:
@@ -286,6 +460,142 @@ def generate_mock_blog() -> dict:
         ]
     }
 
+# Export Functions
+def export_to_markdown(blog_data: dict) -> str:
+    """Convert blog data to Markdown format."""
+    md = f"# {blog_data.get('title', 'Untitled')}\n\n"
+    
+    for section in blog_data.get('sections', []):
+        md += f"## {section.get('heading', 'Section')}\n\n"
+        md += f"{section.get('content', '')}\n\n"
+    
+    # Add SEO metadata as comments
+    seo = blog_data.get('seo', {})
+    md += "---\n\n"
+    md += f"**SEO Title:** {seo.get('title', '')}\n\n"
+    md += f"**Meta Description:** {seo.get('metaDescription', '')}\n\n"
+    md += f"**Keywords:** {', '.join(seo.get('keywords', []))}\n"
+    
+    return md
+
+def export_to_html(blog_data: dict) -> str:
+    """Convert blog data to HTML format."""
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{blog_data.get('seo', {}).get('metaDescription', '')}">
+    <meta name="keywords" content="{', '.join(blog_data.get('seo', {}).get('keywords', []))}">
+    <title>{blog_data.get('seo', {}).get('title', blog_data.get('title', 'Blog Post'))}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.8; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }}
+        article {{ background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #1a1a2e; border-bottom: 3px solid #4361ee; padding-bottom: 10px; }}
+        h2 {{ color: #16213e; margin-top: 30px; }}
+        p {{ color: #333; }}
+    </style>
+</head>
+<body>
+    <article>
+        <h1>{blog_data.get('title', 'Untitled')}</h1>
+"""
+    
+    for section in blog_data.get('sections', []):
+        html += f"        <section>\n"
+        html += f"            <h2>{section.get('heading', 'Section')}</h2>\n"
+        html += f"            <p>{section.get('content', '')}</p>\n"
+        html += f"        </section>\n"
+    
+    html += """    </article>
+</body>
+</html>"""
+    
+    return html
+
+def export_to_wordpress(blog_data: dict) -> dict:
+    """Convert blog data to WordPress-compatible format."""
+    return {
+        "post_title": blog_data.get('title', 'Untitled'),
+        "post_content": "\n\n".join([
+            f"<h2>{s.get('heading', '')}</h2>\n<p>{s.get('content', '')}</p>"
+            for s in blog_data.get('sections', [])
+        ]),
+        "post_excerpt": blog_data.get('seo', {}).get('metaDescription', ''),
+        "post_status": "draft",
+        "meta": {
+            "yoast_wpseo_title": blog_data.get('seo', {}).get('title', ''),
+            "yoast_wpseo_metadesc": blog_data.get('seo', {}).get('metaDescription', ''),
+            "yoast_wpseo_focuskw": blog_data.get('seo', {}).get('keywords', [''])[0] if blog_data.get('seo', {}).get('keywords') else ''
+        },
+        "tags": blog_data.get('seo', {}).get('keywords', [])
+    }
+
+# Social Media Snippet Generation
+def generate_social_snippets(blog_data: dict) -> dict:
+    """Generate social media snippets from blog content."""
+    title = blog_data.get('title', 'Check this out!')
+    sections = blog_data.get('sections', [])
+    
+    # Extract key points for snippets
+    key_points = []
+    for section in sections[:3]:
+        content = section.get('content', '')
+        if content:
+            # Get first sentence
+            sentences = content.split('.')
+            if sentences:
+                key_points.append(sentences[0].strip())
+    
+    # Twitter Thread (max 280 chars per tweet)
+    twitter_thread = []
+    twitter_thread.append(f"🧵 {title[:250]}")
+    for i, point in enumerate(key_points, 1):
+        twitter_thread.append(f"{i}/ {point[:270]}")
+    twitter_thread.append("💡 Share if you found this useful! #content #blog")
+    
+    # LinkedIn Post (longer form)
+    linkedin_post = f"""🎯 {title}
+
+{chr(10).join([f"✅ {p}" for p in key_points[:5]])}
+
+What are your thoughts on this? Drop a comment below! 👇
+
+#content #blogging #insights #professional"""
+    
+    # Instagram Caption
+    instagram_caption = f"""📱 {title}
+
+{key_points[0] if key_points else 'Great insights ahead!'}
+
+Double tap if you agree! ❤️
+Save this for later! 📌
+
+.
+.
+.
+#content #blog #tips #insights #viral #trending"""
+    
+    # Facebook Post
+    facebook_post = f"""📢 {title}
+
+{chr(10).join([f"• {p}" for p in key_points[:3]])}
+
+Read the full article in our bio link! 🔗
+
+What do you think? Let us know in the comments!"""
+    
+    return {
+        "twitter": {
+            "thread": twitter_thread,
+            "singleTweet": f"{title[:200]}... Read more!"
+        },
+        "linkedin": linkedin_post,
+        "instagram": instagram_caption,
+        "facebook": facebook_post
+    }
+
+
 @app.route('/api/process-video', methods=['POST'])
 def process_video():
     try:
@@ -308,18 +618,24 @@ def process_video():
         video_path = os.path.normpath(video_path)
         logger.info(f"Normalized path: {video_path}")
         
-        # Step 1: Transcribe video
-        transcription_result = transcribe_with_deepgram(video_path)
+        # Step 1: Transcribe video (try AssemblyAI first, then Deepgram as fallback)
+        transcription_result = transcribe_with_assemblyai(video_path)
         transcript = transcription_result.get('text')
         transcription_warning = None
         
         if not transcription_result.get('success'):
-            transcription_warning = transcription_result.get('error')
-            logger.warning(f"Transcription warning: {transcription_warning}")
-            if transcription_result.get('mock'):
-                transcript = "Sample transcript (Deepgram API not configured)"
-            else:
-                transcript = "Sample transcript (transcription failed)"
+            logger.warning(f"AssemblyAI failed: {transcription_result.get('error')}, trying Deepgram...")
+            # Fallback to Deepgram
+            transcription_result = transcribe_with_deepgram(video_path)
+            transcript = transcription_result.get('text')
+            
+            if not transcription_result.get('success'):
+                transcription_warning = transcription_result.get('error')
+                logger.warning(f"Transcription warning: {transcription_warning}")
+                if transcription_result.get('mock'):
+                    transcript = "Sample transcript (APIs not configured)"
+                else:
+                    transcript = "Sample transcript (transcription failed)"
         
         # Step 2: Generate blog summary
         blog_generation_result = generate_summary_with_openrouter(transcript)
@@ -336,14 +652,16 @@ def process_video():
         
         # Build response
         seo_data = blog_data.get("seo", {})
+        full_blog = {
+            "title": blog_data.get("title", "Untitled"),
+            "sections": blog_data.get("sections", [])
+        }
+        
         result = {
             "jobId": job_id,
             "status": "completed",
             "transcript": transcript,
-            "blog": {
-                "title": blog_data.get("title", "Untitled"),
-                "sections": blog_data.get("sections", [])
-            },
+            "blog": full_blog,
             "seo": {
                 "title": seo_data.get("title", "Blog Title"),
                 "metaDescription": seo_data.get("metaDescription", "Description"),
@@ -351,7 +669,9 @@ def process_video():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []))
+            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []), blog_data.get("title", "")),
+            "socialSnippets": generate_social_snippets(blog_data),
+            "availableExports": ["markdown", "html", "wordpress"]
         }
         
         # Add warnings if using fallbacks
@@ -509,16 +829,18 @@ def process_youtube():
         
         # Build response
         seo_data = blog_data.get("seo", {})
+        full_blog = {
+            "title": blog_data.get("title", "Untitled"),
+            "sections": blog_data.get("sections", [])
+        }
+        
         result = {
             "jobId": job_id,
             "status": "completed",
             "source": "youtube",
             "videoId": video_id,
             "transcript": transcript,
-            "blog": {
-                "title": blog_data.get("title", "Untitled"),
-                "sections": blog_data.get("sections", [])
-            },
+            "blog": full_blog,
             "seo": {
                 "title": seo_data.get("title", "Blog Title"),
                 "metaDescription": seo_data.get("metaDescription", "Description"),
@@ -526,7 +848,9 @@ def process_youtube():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []))
+            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []), blog_data.get("title", "")),
+            "socialSnippets": generate_social_snippets(blog_data),
+            "availableExports": ["markdown", "html", "wordpress"]
         }
         
         # Add warnings if using fallbacks
