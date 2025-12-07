@@ -8,6 +8,11 @@ import json
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
 import assemblyai as aai
+import subprocess
+import tempfile
+import random
+import time
+import sys
 
 load_dotenv()
 
@@ -716,21 +721,19 @@ def extract_youtube_video_id(url: str) -> str:
     return None
 
 def transcribe_youtube(video_id: str) -> dict:
-    """Get transcript from YouTube video using youtube-transcript-api.
+    """Get transcript from YouTube with multiple fallback strategies.
     
     Returns: {'success': bool, 'text': str, 'error': str or None}
     """
-    import time
+    logger.info(f"Fetching YouTube transcript for video: {video_id}")
     
+    # Strategy 1: Fast direct fetch (youtube-transcript-api)
     try:
-        logger.info(f"Fetching YouTube transcript for video: {video_id}")
-        
-        # Method 1: Try direct fetch with multiple language options
+        # Try multiple languages
         languages_to_try = [
             ['en', 'en-US', 'en-GB'],
             ['hi', 'hi-IN'],
-            ['en'],
-            ['es', 'fr', 'de', 'pt', 'ru', 'ja', 'ko', 'zh-Hans', 'zh-Hant']
+            ['es', 'fr', 'de', 'pt', 'ru', 'ja', 'ko']
         ]
         
         for langs in languages_to_try:
@@ -738,66 +741,89 @@ def transcribe_youtube(video_id: str) -> dict:
                 transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
                 full_text = ' '.join([segment['text'] for segment in transcript_data])
                 if full_text.strip():
-                    logger.info(f"✓ YouTube transcript fetched: {len(full_text)} characters")
+                    logger.info(f"✓ YouTube transcript fetched (API): {len(full_text)} chars")
                     return {'success': True, 'text': full_text, 'error': None}
-            except Exception as e:
-                logger.debug(f"Attempt with {langs} failed: {str(e)}")
+            except Exception:
                 continue
-        
-        # Method 2: Try listing all available transcripts
-        try:
-            time.sleep(1)  # Small delay to avoid rate limiting
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            for transcript in transcript_list:
-                logger.info(f"Found transcript: {transcript.language} (auto: {transcript.is_generated})")
-                try:
-                    transcript_data = transcript.fetch()
-                    full_text = ' '.join([segment['text'] for segment in transcript_data])
-                    if full_text.strip():
-                        logger.info(f"✓ YouTube transcript fetched (via list): {len(full_text)} characters")
-                        return {'success': True, 'text': full_text, 'error': None}
-                except Exception as fetch_err:
-                    logger.warning(f"Failed to fetch {transcript.language}: {str(fetch_err)}")
-                    
-                    # Try translating to English if it's a non-English transcript
-                    if not transcript.language.startswith('en'):
-                        try:
-                            translated = transcript.translate('en')
-                            transcript_data = translated.fetch()
-                            full_text = ' '.join([segment['text'] for segment in transcript_data])
-                            if full_text.strip():
-                                logger.info(f"✓ YouTube transcript fetched (translated): {len(full_text)} characters")
-                                return {'success': True, 'text': full_text, 'error': None}
-                        except Exception as trans_err:
-                            logger.warning(f"Translation failed: {str(trans_err)}")
-                    continue
-                    
-        except Exception as list_err:
-            logger.warning(f"List transcripts failed: {str(list_err)}")
-        
-        # Method 3: Try with generated transcripts specifically
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            generated = transcript_list.find_generated_transcript(['en', 'en-US', 'hi'])
-            transcript_data = generated.fetch()
-            full_text = ' '.join([segment['text'] for segment in transcript_data])
-            if full_text.strip():
-                logger.info(f"✓ YouTube transcript fetched (generated): {len(full_text)} characters")
-                return {'success': True, 'text': full_text, 'error': None}
-        except Exception as gen_err:
-            logger.warning(f"Generated transcript failed: {str(gen_err)}")
-        
-        return {
-            'success': False, 
-            'text': None, 
-            'error': 'Could not fetch transcript. YouTube may be blocking requests or video has no captions.'
-        }
-        
+                
     except Exception as e:
-        error_msg = f"YouTube transcript error: {str(e)}"
-        logger.error(error_msg)
-        return {'success': False, 'text': None, 'error': error_msg}
+        logger.warning(f"Strategy 1 failed: {e}")
+
+    # Strategy 2: yt-dlp (Most Reliable)
+    try:
+        logger.info("Attempting Strategy 2: yt-dlp...")
+        
+        # Create temp directory for output
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_template = os.path.join(temp_dir, '%(id)s')
+            
+            # 1. Download subtitles
+            cmd = [
+                sys.executable, '-m', 'yt_dlp',
+                '--write-auto-sub',
+                '--write-sub',
+                '--sub-lang', 'en,en-US,hi',
+                '--skip-download',
+                '--output', output_template,
+                f'https://www.youtube.com/watch?v={video_id}'
+            ]
+            
+            # Add proxy if configured
+            proxy_list = os.getenv('PROXY_LIST', '').split(',')
+            proxy_list = [p.strip() for p in proxy_list if p.strip()]
+            if proxy_list:
+                proxy = random.choice(proxy_list)
+                cmd.extend(['--proxy', proxy])
+                logger.info(f"Using proxy: {proxy}")
+            
+            # Run yt-dlp
+            result = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                check=False
+            )
+            
+            if result.returncode != 0:
+                logger.warning(f"yt-dlp failed: {result.stderr}")
+            
+            # 2. Parse the downloaded VTT file
+            # Check for any .vtt file in the temp dir
+            vtt_files = [f for f in os.listdir(temp_dir) if f.endswith('.vtt')]
+            
+            if vtt_files:
+                vtt_path = os.path.join(temp_dir, vtt_files[0])
+                logger.info(f"Parsing VTT file: {vtt_path}")
+                
+                # Simple VTT parser to extract text
+                lines = []
+                with open(vtt_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        # Skip timestamp lines and metadata
+                        if '-->' in line or not line or line.startswith('WEBVTT') or line.startswith('NOTE'):
+                            continue
+                        # Remove tags like <c.colorE5E5E5>
+                        line = re.sub(r'<[^>]+>', '', line)
+                        # Avoid duplicates (captions often repeat)
+                        if not lines or lines[-1] != line:
+                            lines.append(line)
+                
+                full_text = ' '.join(lines)
+                if len(full_text) > 50:
+                    logger.info(f"✓ YouTube transcript fetched (yt-dlp): {len(full_text)} chars")
+                    return {'success': True, 'text': full_text, 'error': None}
+            else:
+                logger.warning("No VTT files found after yt-dlp run")
+
+    except Exception as e:
+        logger.error(f"Strategy 2 failed: {e}")
+
+    return {
+        'success': False, 
+        'text': None, 
+        'error': 'Failed to fetch transcript. YouTube may be blocking requests or no captions available.'
+    }
 
 @app.route('/api/process-youtube', methods=['POST'])
 def process_youtube():

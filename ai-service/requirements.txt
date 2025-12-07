@@ -4,3 +4,4 @@ requests==2.31.0
 flask-cors==4.0.0
 youtube-transcript-api==0.6.2
 assemblyai==0.35.1
+yt-dlp==2023.12.30
