@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
+import BackgroundMusic from '../components/BackgroundMusic'
 
 import heroBg from '../assets/hero-bg.png'
 
@@ -10,6 +11,7 @@ export default function HeroPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] relative overflow-hidden selection:bg-emerald-500/30">
+      <BackgroundMusic src="/audio/song1.mp3" />
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <img

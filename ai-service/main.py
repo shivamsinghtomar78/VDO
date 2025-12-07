@@ -364,9 +364,18 @@ Transcript: {transcript[:3000]}"""
 def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
     """Generate image suggestions using Freepik API with contextual prompts."""
     if not FREEPIK_API_KEY or not sections:
+        # Return placeholder images if API key is not set
         return [
-            {"section": "Introduction", "prompt": "Professional header image", "imageUrl": None},
-            {"section": "Main Content", "prompt": "Content illustration", "imageUrl": None}
+            {
+                "section": "Introduction", 
+                "prompt": "Professional header image", 
+                "imageUrl": "https://placehold.co/800x400?text=Header+Image"
+            },
+            {
+                "section": "Main Content", 
+                "prompt": "Content illustration", 
+                "imageUrl": "https://placehold.co/800x400?text=Content+Illustration"
+            }
         ]
     
     def extract_keywords(text: str) -> str:

@@ -4,12 +4,12 @@ const TIMEOUT = 300000 // 5 minutes for video processing
 const MAX_RETRIES = 1 // Don't retry since processing takes long
 const RETRY_DELAY = 1000 // 1 second
 
-export async function uploadVideo(file, onProgress) {
+export async function uploadVideo(file, template = 'standard', onProgress) {
   let lastError
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await uploadWithTimeout(file, onProgress)
+      return await uploadWithTimeout(file, template, onProgress)
     } catch (error) {
       lastError = error
       if (attempt < MAX_RETRIES) {
@@ -21,13 +21,14 @@ export async function uploadVideo(file, onProgress) {
   throw lastError
 }
 
-async function uploadWithTimeout(file, onProgress) {
+async function uploadWithTimeout(file, template, onProgress) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
 
   try {
     const formData = new FormData()
     formData.append('video', file)
+    formData.append('template', template)
 
     const uploadUrl = '/api/upload-video'
     console.log('Uploading to:', uploadUrl)
@@ -67,6 +68,8 @@ async function uploadWithTimeout(file, onProgress) {
       imageSuggestions: data.imageSuggestions || [],
       transcript: data.transcript || 'Transcript not available',
       warnings: data.warnings || [],
+      socialSnippets: data.socialSnippets || {},
+      availableExports: data.availableExports || [],
       isMockData: data.isMockData || false
     }
 
@@ -87,7 +90,7 @@ async function uploadWithTimeout(file, onProgress) {
   }
 }
 
-export async function processYouTubeUrl(youtubeUrl) {
+export async function processYouTubeUrl(youtubeUrl, template = 'standard') {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout
 
@@ -97,7 +100,7 @@ export async function processYouTubeUrl(youtubeUrl) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ youtubeUrl }),
+      body: JSON.stringify({ youtubeUrl, template }),
       signal: controller.signal
     })
 
@@ -130,7 +133,9 @@ export async function processYouTubeUrl(youtubeUrl) {
       },
       imageSuggestions: data.imageSuggestions || [],
       transcript: data.transcript || 'Transcript not available',
-      warnings: data.warnings || []
+      warnings: data.warnings || [],
+      socialSnippets: data.socialSnippets || {},
+      availableExports: data.availableExports || []
     }
 
     console.log('YouTube processing successful:', enrichedData)

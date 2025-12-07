@@ -85,18 +85,21 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       return res.status(400).json({ error: 'No video file provided' })
     }
 
+    const { template } = req.body
     const jobId = uuidv4()
     const videoPath = req.file.path
 
     console.log(`✓ Video uploaded: ${req.file.filename} (${(req.file.size / (1024 * 1024)).toFixed(2)} MB)`)
     console.log(`✓ Job ID: ${jobId}`)
+    console.log(`✓ Template: ${template || 'standard'}`)
 
     // Call Python service to process the video
     try {
       const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-video`, {
         jobId,
         videoPath,
-        filename: req.file.filename
+        filename: req.file.filename,
+        template: template || 'standard'
       }, {
         timeout: 300000 // 5 minute timeout for video processing
       })
@@ -120,7 +123,9 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
           seoScore: 0,
           readabilityScore: 0
         },
-        imageSuggestions: result.imageSuggestions || []
+        imageSuggestions: result.imageSuggestions || [],
+        socialSnippets: result.socialSnippets || {},
+        availableExports: result.availableExports || []
       }
 
       console.log('Response data structure:')
@@ -177,7 +182,7 @@ app.get('/api/status/:jobId', (req, res) => {
  */
 app.post('/api/youtube-url', async (req, res) => {
   try {
-    const { youtubeUrl } = req.body
+    const { youtubeUrl, template } = req.body
 
     if (!youtubeUrl) {
       return res.status(400).json({ error: 'No YouTube URL provided' })
@@ -186,12 +191,14 @@ app.post('/api/youtube-url', async (req, res) => {
     const jobId = uuidv4()
     console.log(`✓ YouTube URL received: ${youtubeUrl}`)
     console.log(`✓ Job ID: ${jobId}`)
+    console.log(`✓ Template: ${template || 'standard'}`)
 
     // Call Python service to process the YouTube URL
     try {
       const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-youtube`, {
         jobId,
-        youtubeUrl
+        youtubeUrl,
+        template: template || 'standard'
       }, {
         timeout: 120000 // 2 minute timeout for YouTube processing
       })
@@ -215,7 +222,9 @@ app.post('/api/youtube-url', async (req, res) => {
           readabilityScore: 0
         },
         imageSuggestions: result.imageSuggestions || [],
-        warnings: result.warnings || []
+        warnings: result.warnings || [],
+        socialSnippets: result.socialSnippets || {},
+        availableExports: result.availableExports || []
       }
 
       res.json(finalResult)
@@ -231,6 +240,34 @@ app.post('/api/youtube-url', async (req, res) => {
     res.status(500).json({ error: 'Error processing YouTube URL: ' + error.message })
   }
 })
+
+/**
+ * Proxy for Social Snippets
+ * POST /api/social-snippets
+ */
+app.post('/api/social-snippets', async (req, res) => {
+  try {
+    const response = await axios.post(`${PYTHON_SERVICE_URL}/api/social-snippets`, req.body);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error proxying social snippets:', error.message);
+    res.status(500).json({ error: 'Failed to generate snippets' });
+  }
+});
+
+/**
+ * Proxy for Exports
+ * POST /api/export
+ */
+app.post('/api/export', async (req, res) => {
+  try {
+    const response = await axios.post(`${PYTHON_SERVICE_URL}/api/export`, req.body);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error proxying export:', error.message);
+    res.status(500).json({ error: 'Failed to export content' });
+  }
+});
 
 // Error handler for multer
 app.use((error, req, res, next) => {

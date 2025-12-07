@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
+import BackgroundMusic from '../components/BackgroundMusic'
 import { MOCK_RESULT } from '../utils/mockData'
 import heroBg from '../assets/hero-bg.png'
 
@@ -45,6 +46,7 @@ export default function ResultPage() {
   if (!result) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
+        <BackgroundMusic src="/audio/song2.mp3" />
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[120px] animate-blob" />
           <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/20 rounded-full blur-[120px] animate-blob animation-delay-2000" />
@@ -92,6 +94,7 @@ export default function ResultPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] relative selection:bg-emerald-500/30">
+      <BackgroundMusic src="/audio/song2.mp3" />
       {/* Background Image */}
       <div className="fixed inset-0 z-0">
         <img
@@ -165,7 +168,9 @@ export default function ResultPage() {
             {[
               { id: 'blog', label: 'Blog Article', icon: '✍️' },
               { id: 'seo', label: 'SEO Metadata', icon: '🎯' },
-              { id: 'images', label: 'Image Prompts', icon: '🎨' },
+              { id: 'images', label: 'Images', icon: '🖼️' },
+              { id: 'social', label: 'Social Media', icon: '📱' },
+              { id: 'export', label: 'Export', icon: '📤' },
               { id: 'transcript', label: 'Transcript', icon: '📋' }
             ].map(tab => (
               <button
@@ -318,21 +323,157 @@ export default function ResultPage() {
                     transition={{ delay: idx * 0.1 }}
                     className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:border-purple-500/30 transition-all group"
                   >
+                    {img.imageUrl ? (
+                      <div className="aspect-video relative overflow-hidden group">
+                        <img
+                          src={img.imageUrl}
+                          alt={img.prompt}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                          <a
+                            href={img.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-white text-sm font-bold bg-purple-500/80 px-4 py-2 rounded-lg hover:bg-purple-500 transition-colors"
+                          >
+                            View Full Size
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="aspect-video bg-gradient-to-br from-purple-500/10 to-pink-500/10 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                        <span className="text-4xl">🖼️</span>
+                      </div>
+                    )}
                     <div className="p-6">
                       <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm font-bold text-purple-400">Section {idx + 1}</span>
-                        <span className="text-2xl opacity-50 group-hover:opacity-100 transition-opacity">🎨</span>
+                        <span className="text-sm font-bold text-purple-400">Section {idx + 1}: {img.section}</span>
                       </div>
                       <div className="bg-black/30 rounded-xl p-4 mb-4 border border-white/5">
                         <p className="text-gray-300 text-sm leading-relaxed italic">
                           "{img.prompt}"
                         </p>
                       </div>
-                      <button className="w-full py-3 rounded-xl bg-purple-500/10 text-purple-300 font-bold text-sm hover:bg-purple-500/20 border border-purple-500/20 transition-all flex items-center justify-center gap-2">
-                        <span>✨</span> Generate Image
-                      </button>
                     </div>
                   </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* Social Media Tab */}
+            {activeTab === 'social' && result.socialSnippets && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Twitter */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-blue-400/30 transition-all">
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className="text-2xl">🐦</span>
+                    <h3 className="text-lg font-bold text-white">Twitter Thread</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {result.socialSnippets.twitter.thread.map((tweet, i) => (
+                      <div key={i} className="bg-black/30 p-4 rounded-xl border border-white/5 text-gray-300 text-sm">
+                        {tweet}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => navigator.clipboard.writeText(result.socialSnippets.twitter.thread.join('\n\n'))}
+                      className="w-full py-2 bg-blue-500/10 text-blue-400 rounded-lg text-sm font-bold hover:bg-blue-500/20 transition-colors"
+                    >
+                      Copy Thread
+                    </button>
+                  </div>
+                </div>
+
+                {/* LinkedIn */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-blue-600/30 transition-all">
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className="text-2xl">💼</span>
+                    <h3 className="text-lg font-bold text-white">LinkedIn Post</h3>
+                  </div>
+                  <div className="bg-black/30 p-4 rounded-xl border border-white/5 text-gray-300 text-sm whitespace-pre-wrap mb-4">
+                    {result.socialSnippets.linkedin}
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(result.socialSnippets.linkedin)}
+                    className="w-full py-2 bg-blue-600/10 text-blue-400 rounded-lg text-sm font-bold hover:bg-blue-600/20 transition-colors"
+                  >
+                    Copy Post
+                  </button>
+                </div>
+
+                {/* Instagram */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-pink-500/30 transition-all">
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className="text-2xl">📸</span>
+                    <h3 className="text-lg font-bold text-white">Instagram Caption</h3>
+                  </div>
+                  <div className="bg-black/30 p-4 rounded-xl border border-white/5 text-gray-300 text-sm whitespace-pre-wrap mb-4">
+                    {result.socialSnippets.instagram}
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(result.socialSnippets.instagram)}
+                    className="w-full py-2 bg-pink-500/10 text-pink-400 rounded-lg text-sm font-bold hover:bg-pink-500/20 transition-colors"
+                  >
+                    Copy Caption
+                  </button>
+                </div>
+
+                {/* Facebook */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-blue-500/30 transition-all">
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className="text-2xl">👥</span>
+                    <h3 className="text-lg font-bold text-white">Facebook Post</h3>
+                  </div>
+                  <div className="bg-black/30 p-4 rounded-xl border border-white/5 text-gray-300 text-sm whitespace-pre-wrap mb-4">
+                    {result.socialSnippets.facebook}
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(result.socialSnippets.facebook)}
+                    className="w-full py-2 bg-blue-500/10 text-blue-400 rounded-lg text-sm font-bold hover:bg-blue-500/20 transition-colors"
+                  >
+                    Copy Post
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Export Tab */}
+            {activeTab === 'export' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { name: 'Markdown', ext: '.md', icon: '📝', desc: 'Clean text format for developers', format: 'markdown' },
+                  { name: 'HTML', ext: '.html', icon: '🌐', desc: 'Ready-to-publish web page', format: 'html' },
+                  { name: 'WordPress', ext: '.json', icon: 'Wordpress', desc: 'Import directly to WordPress', format: 'wordpress' }
+                ].map((option) => (
+                  <button
+                    key={option.name}
+                    onClick={() => {
+                      fetch('/api/export', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blog: result.blog, format: option.format })
+                      })
+                        .then(res => res.json())
+                        .then(data => {
+                          const blob = new Blob([data.content], { type: 'text/plain' });
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${result.blog.title.slice(0, 20)}${data.extension}`;
+                          a.click();
+                        });
+                    }}
+                    className="group bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-emerald-500/30 transition-all text-left"
+                  >
+                    <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{option.icon}</div>
+                    <h3 className="text-xl font-bold text-white mb-2">{option.name}</h3>
+                    <p className="text-gray-400 text-sm mb-6">{option.desc}</p>
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm group-hover:gap-3 transition-all">
+                      Download {option.ext} <span>→</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             )}
