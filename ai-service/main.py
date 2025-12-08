@@ -366,92 +366,123 @@ Transcript: {transcript[:3000]}"""
         logger.error(error_msg)
         return {'success': False, 'data': None, 'error': error_msg}
 
-def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
-    """Generate image suggestions using Freepik API with contextual prompts."""
-    if not FREEPIK_API_KEY or not sections:
-        # Return placeholder images if API key is not set
-        return [
-            {
-                "section": "Introduction", 
-                "prompt": "Professional header image", 
-                "imageUrl": "https://placehold.co/800x400?text=Header+Image"
-            },
-            {
-                "section": "Main Content", 
-                "prompt": "Content illustration", 
-                "imageUrl": "https://placehold.co/800x400?text=Content+Illustration"
-            }
-        ]
-    
-    def extract_keywords(text: str) -> str:
-        """Extract meaningful keywords from text for image search."""
-        # Remove common words and extract key terms
-        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-                     'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-                     'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-                     'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
-                     'into', 'through', 'during', 'before', 'after', 'above', 'below',
-                     'and', 'or', 'but', 'if', 'then', 'else', 'when', 'up', 'down',
-                     'this', 'that', 'these', 'those', 'it', 'its', 'they', 'their',
-                     'we', 'our', 'you', 'your', 'i', 'my', 'he', 'she', 'him', 'her'}
-        
-        words = text.lower().split()
-        keywords = [w for w in words if len(w) > 3 and w not in stop_words]
-        return ' '.join(keywords[:5])
-    
+def generate_mystic_image(prompt: str) -> str:
+    """Generate a single image using Freepik Mystic API with polling."""
+    if not FREEPIK_API_KEY:
+        logger.warning("Freepik API key not set, skipping Mystic generation")
+        return None
+
     try:
-        suggestions = []
-        for i, section in enumerate(sections[:4]):
-            heading = section.get('heading', 'Content')
-            content = section.get('content', '')
-            
-            # Generate contextual search query
-            if content:
-                query = extract_keywords(heading + ' ' + content)
-            else:
-                query = extract_keywords(heading)
-            
-            if not query:
-                query = "professional business"
-            
-            logger.info(f"Searching Freepik for: {query}")
-            
-            response = requests.get(
-                f"https://api.freepik.com/v1/resources",
-                headers={'x-freepik-api-key': FREEPIK_API_KEY},
-                params={'query': query, 'limit': 1, 'filters[content_type][photo]': 1},
-                timeout=10
-            )
-            
-            logger.info(f"Freepik API response: {response.status_code}")
-            
-            image_url = None
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('data') and len(data['data']) > 0:
-                    resource = data['data'][0]
-                    image_info = resource.get('image', {}).get('source', {})
-                    image_url = image_info.get('url')
-                    logger.info(f"Found image URL: {image_url}")
-            
-            suggestions.append({
-                "section": heading,
-                "prompt": f"AI-suggested image for: {query}",
-                "imageUrl": image_url,
-                "searchQuery": query
-            })
+        # 1. Submit Generation Task
+        url = "https://api.freepik.com/v1/ai/mystic"
+        headers = {
+            "x-freepik-api-key": FREEPIK_API_KEY,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "prompt": prompt,
+            "resolution": "2k",
+            "aspect_ratio": "widescreen_16_9",
+            "model": "realism",
+            "filter_nsfw": True
+        }
         
-        return suggestions if suggestions else [
-            {"section": "Introduction", "prompt": "Professional header", "imageUrl": None},
-            {"section": "Content", "prompt": "Main illustration", "imageUrl": None}
-        ]
+        logger.info(f"Submitting Mystic task for: {prompt[:50]}...")
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
         
+        if response.status_code != 200:
+            logger.error(f"Mystic submission failed: {response.text}")
+            return None
+            
+        task_data = response.json().get('data', {})
+        task_id = task_data.get('task_id')
+        
+        if not task_id:
+            logger.error("No task_id received from Mystic API")
+            return None
+            
+        logger.info(f"Mystic task started: {task_id}")
+        
+        # 2. Poll for Completion
+        max_retries = 30 # 30 seconds max
+        for i in range(max_retries):
+            time.sleep(1) # Wait 1 second between checks
+            
+            check_url = f"https://api.freepik.com/v1/ai/mystic/{task_id}"
+            check_response = requests.get(check_url, headers=headers, timeout=10)
+            
+            if check_response.status_code != 200:
+                continue
+                
+            status_data = check_response.json().get('data', {})
+            status = status_data.get('status')
+            
+            if status == 'COMPLETED':
+                generated_images = status_data.get('generated', [])
+                if generated_images:
+                    image_url = generated_images[0].get('url') # Current API returns list of objects with url? Or list of strings?
+                    # Based on doc: "generated": ["url1", "url2"] usually, but let's verify if user provided specific response format.
+                    # User provided sample: "generated": ["https://...", "https://..."] in the 'data' object of the GET response.
+                    # Wait, the user provided documentation for POST response says "generated": [] empty initially.
+                    # GET response payload is same as POST but with data. 
+                    # Let's assume list of base64 or URLs. The doc says "generated": ["https://openapi-generator.tech"] in example.
+                    # So it's a list of strings (URLs).
+                    
+                    if isinstance(generated_images[0], str):
+                         # If it's a string, it's the URL/Base64
+                         pass
+                    elif isinstance(generated_images[0], dict):
+                         # Just in case it's an object
+                         image_url = generated_images[0].get('url') or generated_images[0].get('base64')
+
+                    # Actually, the user sample shows: "generated": ["https://..."]
+                    if generated_images:
+                        final_url = generated_images[0]
+                        logger.info(f"Mystic generation completed: {final_url[:50]}...")
+                        return final_url
+                
+                logger.warning("Mystic completed but no images found")
+                return None
+                
+            elif status == 'FAILED':
+                logger.error("Mystic generation failed")
+                return None
+        
+        logger.warning("Mystic generation timed out")
+        return None
+
     except Exception as e:
-        logger.error(f"Image suggestion error: {e}")
-        return [
-            {"section": "Introduction", "prompt": "Professional header", "imageUrl": None},
-            {"section": "Content", "prompt": "Main illustration", "imageUrl": None}
-        ]
+        logger.error(f"Mystic generation error: {e}")
+        return None
+
+def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
+    """Generate image suggestions. Uses Mystic for the main hero image."""
+    
+    # 1. Generate one Hero Image using Mystic
+    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting"
+    if not blog_title:
+        hero_prompt = "cinematic photography of a modern professional workspace, 4k, detailed"
+        
+    hero_image = generate_mystic_image(hero_prompt)
+    
+    # Fallback if Mystic fails
+    if not hero_image:
+        hero_image = "https://placehold.co/1200x600?text=Hero+Image"
+
+    suggestions = [
+        {
+            "section": "Hero", 
+            "prompt": hero_prompt, 
+            "imageUrl": hero_image,
+            "type": "hero"
+        }
+    ]
+    
+    # We can add more placeholder/conventional images for sections if needed, 
+    # but for "Medium style" usually one big header is enough, or maybe one in the middle.
+    # Let's keep it clean with just the hero image for now as Mystic is expensive/slow.
+    
+    return suggestions
 
 def generate_mock_blog() -> dict:
     return {
