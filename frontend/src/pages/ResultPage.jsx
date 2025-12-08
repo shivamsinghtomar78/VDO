@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
 import { MOCK_RESULT } from '../utils/mockData'
-import heroBg from '../assets/hero-bg.png'
+
 
 const SAMPLE_DATA = MOCK_RESULT
 

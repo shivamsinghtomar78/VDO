@@ -495,6 +495,14 @@ def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
                 "imageUrl": section_image,
                 "type": "section"
             })
+        else:
+             # Fallback
+             suggestions.append({
+                "section": heading, 
+                "prompt": section_prompt, 
+                "imageUrl": "https://placehold.co/1200x600?text=Section+Image+Failed",
+                "type": "section"
+            })
 
     # 3. Conclusion/Abstract Image
     conclusion_prompt = "abstract artistic representation of future technology and success, minimal, elegant, soft lighting, 4k"
@@ -506,6 +514,14 @@ def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
             "section": "Footer", 
             "prompt": conclusion_prompt, 
             "imageUrl": conclusion_image,
+            "type": "footer"
+        })
+    else:
+        # Fallback
+        suggestions.append({
+            "section": "Footer", 
+            "prompt": conclusion_prompt, 
+            "imageUrl": "https://placehold.co/1200x600?text=Footer+Image+Failed",
             "type": "footer"
         })
     
