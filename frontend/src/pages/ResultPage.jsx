@@ -11,6 +11,7 @@ const SAMPLE_DATA = MOCK_RESULT
 export default function ResultPage() {
   const [result, setResult] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [activeTab, setActiveTab] = useState('blog')
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -59,7 +60,6 @@ export default function ResultPage() {
     )
   }
 
-  // Extract Hero Image (from Mystic API or Fallback)
   const heroImage = result.imageSuggestions?.find(img => img.type === 'hero' || img.section === 'Hero')?.imageUrl || result.imageSuggestions?.[0]?.imageUrl
 
   const downloadBlog = (format) => {
@@ -79,6 +79,10 @@ export default function ResultPage() {
       });
   }
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+  }
+
   return (
     <div className="min-h-screen bg-[#ffffff] text-slate-900 font-serif selection:bg-emerald-100 selection:text-emerald-900">
       <Navigation onUpload={() => setShowUpload(true)} dark={false} />
@@ -87,80 +91,100 @@ export default function ResultPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="pt-32 pb-24 px-6 max-w-[720px] mx-auto" // Standard Medium column width
+        className="pt-32 pb-24 px-6 max-w-[720px] mx-auto"
       >
         {/* Article Header */}
         <header className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900 mb-6 leading-[1.15] font-sans">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 mb-6 leading-[1.15] font-serif">
             {result.blog.title}
           </h1>
-          <h2 className="text-xl md:text-2xl text-slate-500 font-medium leading-relaxed mb-8 font-sans">
+          <h2 className="text-xl text-slate-500 font-medium leading-relaxed mb-8 font-sans">
             {result.seo.metaDescription}
           </h2>
 
-          <div className="flex items-center gap-4 border-b border-slate-100 pb-8 mb-8">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-emerald-200">
-              AI
-            </div>
-            <div>
-              <div className="font-bold text-slate-900 font-sans">AI Ghostwriter</div>
-              <div className="text-slate-500 text-sm font-sans flex items-center gap-2">
-                <span>5 min read</span>
-                <span>•</span>
-                <span className="text-emerald-600">{new Date().toLocaleDateString()}</span>
-              </div>
-            </div>
+          {/* Quick Access Menu */}
+          <div className="flex flex-wrap gap-4 pb-8 mb-8 border-b border-slate-100 font-sans">
+            <button onClick={() => setActiveTab('blog')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-slate-400 hover:text-slate-900 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">📖</span> Blog
+            </button>
+            <button onClick={() => setActiveTab('seo')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-slate-400 hover:text-slate-900 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">🎯</span> SEO Data
+            </button>
+            <button onClick={() => setActiveTab('instagram')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-pink-300 hover:text-pink-600 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">📸</span> Instagram
+            </button>
+            <button onClick={() => setActiveTab('twitter')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-blue-300 hover:text-blue-500 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">𝕏</span> Twitter
+            </button>
+            <button onClick={() => setActiveTab('linkedin')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-blue-700 hover:text-blue-700 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">💼</span> LinkedIn
+            </button>
+            <button onClick={() => setActiveTab('facebook')} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-medium hover:border-blue-600 hover:text-blue-600 transition-all group">
+              <span className="group-hover:scale-110 transition-transform">👥</span> Facebook
+            </button>
           </div>
         </header>
 
-        {/* Hero Image */}
-        {heroImage && (
-          <motion.figure
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-            className="mb-16 -mx-6 md:-mx-12"
-          >
-            <img
-              src={heroImage}
-              alt={result.blog.title}
-              className="w-full h-auto aspect-video object-cover rounded-md shadow-sm"
-            />
-            <figcaption className="text-center text-sm text-slate-500 mt-4 font-sans max-w-lg mx-auto">
-              Generated by Freepik Mystic AI • Prompt: "{result.blog.title}"
-            </figcaption>
-          </motion.figure>
+        {/* Blog Tab */}
+        {activeTab === 'blog' && (
+          <>
+            {/* Hero Image */}
+            {heroImage && (
+              <motion.figure
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="mb-16 -mx-6 md:-mx-12"
+              >
+                <img
+                  src={heroImage}
+                  alt={result.blog.title}
+                  className="w-full h-auto aspect-video object-cover rounded-md shadow-sm"
+                />
+              </motion.figure>
+            )}
+
+            {/* Article Body */}
+            <article className="prose prose-lg prose-slate prose-headings:font-sans prose-headings:font-bold prose-p:text-slate-800 prose-p:leading-8 prose-a:text-emerald-600 prose-a:no-underline hover:prose-a:underline mb-20 max-w-none">
+              {result.blog.sections.map((section, idx) => (
+                <div key={idx} className="mb-12">
+                  <h2 className="text-3xl mb-6 text-slate-900">{section.heading}</h2>
+                  <div className="whitespace-pre-wrap text-slate-700 leading-8">{section.content}</div>
+                </div>
+              ))}
+            </article>
+          </>
         )}
 
-        {/* Article Body */}
-        <article className="prose prose-lg prose-slate prose-headings:font-sans prose-headings:font-bold prose-p:text-slate-800 prose-p:leading-8 prose-a:text-emerald-600 prose-a:no-underline hover:prose-a:underline mb-20 max-w-none">
-          {result.blog.sections.map((section, idx) => (
-            <div key={idx} className="mb-12">
-              <h2 className="text-3xl mb-6 text-slate-900">{section.heading}</h2>
-              <div className="whitespace-pre-wrap">{section.content}</div>
-            </div>
-          ))}
-        </article>
-
-        {/* Footer / Meta Info */}
-        <hr className="border-slate-200 mb-12" />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 font-sans mb-16">
-          {/* SEO Card */}
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+        {/* SEO Tab */}
+        {activeTab === 'seo' && (
+          <div className="bg-slate-50 p-8 rounded-2xl border border-slate-100">
+            <h3 className="font-bold text-2xl text-slate-900 mb-6 flex items-center gap-2">
               <span>🎯</span> SEO Analysis
             </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">SEO Score</span>
-                <span className="font-bold text-emerald-600">{result.seo.seoScore}/100</span>
+            <div className="space-y-6">
+              <div>
+                <span className="text-slate-500 block mb-2 font-bold">SEO Score</span>
+                <div className="flex items-center gap-4">
+                  <div className="w-full bg-slate-200 rounded-full h-3">
+                    <div className="bg-emerald-500 h-3 rounded-full" style={{ width: `${result.seo.seoScore}%` }}></div>
+                  </div>
+                  <span className="font-bold text-emerald-600 text-lg">{result.seo.seoScore}/100</span>
+                </div>
               </div>
               <div>
-                <span className="text-slate-500 block mb-1">Keywords</span>
+                <span className="text-slate-500 block mb-3 font-bold">SEO Title</span>
+                <p className="text-slate-700 bg-white p-3 rounded border border-slate-200">{result.seo.title}</p>
+              </div>
+              <div>
+                <span className="text-slate-500 block mb-3 font-bold">Meta Description</span>
+                <p className="text-slate-700 bg-white p-3 rounded border border-slate-200">{result.seo.metaDescription}</p>
+              </div>
+              <div>
+                <span className="text-slate-500 block mb-3 font-bold">Keywords</span>
                 <div className="flex flex-wrap gap-2">
                   {result.seo.keywords.map(k => (
-                    <span key={k} className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600">
+                    <span key={k} className="px-3 py-1 bg-white border border-emerald-200 rounded-full text-sm font-medium text-emerald-700">
                       {k}
                     </span>
                   ))}
@@ -168,57 +192,106 @@ export default function ResultPage() {
               </div>
             </div>
           </div>
+        )}
 
-          {/* Social Snippets */}
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <span>📱</span> Viral Snippets
+        {/* Instagram Tab */}
+        {activeTab === 'instagram' && (
+          <div className="bg-gradient-to-br from-pink-50 to-purple-50 p-8 rounded-2xl border border-pink-200">
+            <h3 className="font-bold text-2xl text-slate-900 mb-6 flex items-center gap-2">
+              <span>📸</span> Instagram Caption
             </h3>
-            <div className="space-y-4">
-              <button
-                onClick={() => navigator.clipboard.writeText(result.socialSnippets?.twitter?.singleTweet)}
-                className="w-full text-left p-3 bg-white rounded-xl border border-slate-200 hover:border-emerald-200 transition-colors group"
-              >
-                <div className="text-xs font-bold text-slate-400 mb-1 uppercase">Twitter</div>
-                <p className="text-sm text-slate-700 line-clamp-2">{result.socialSnippets?.twitter?.singleTweet}</p>
-              </button>
-              <button
-                onClick={() => navigator.clipboard.writeText(result.socialSnippets?.linkedin)}
-                className="w-full text-left p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-200 transition-colors group"
-              >
-                <div className="text-xs font-bold text-slate-400 mb-1 uppercase">LinkedIn</div>
-                <p className="text-sm text-slate-700 line-clamp-2">{result.socialSnippets?.linkedin}</p>
-              </button>
+            <div className="bg-white p-6 rounded-xl border border-pink-200 mb-4">
+              <p className="text-slate-700 whitespace-pre-wrap leading-7">{result.socialSnippets?.instagram}</p>
             </div>
+            <button
+              onClick={() => copyToClipboard(result.socialSnippets?.instagram)}
+              className="w-full px-6 py-3 rounded-full bg-pink-600 hover:bg-pink-700 text-white font-bold transition-colors"
+            >
+              📋 Copy Caption
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* CTA / Downloads */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-lg border-t border-slate-200 font-sans z-50">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="hidden md:block">
-              <button onClick={() => navigate('/')} className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
-                ← Back to Dashboard
-              </button>
+        {/* Twitter Tab */}
+        {activeTab === 'twitter' && (
+          <div className="bg-blue-50 p-8 rounded-2xl border border-blue-200">
+            <h3 className="font-bold text-2xl text-slate-900 mb-6 flex items-center gap-2">
+              <span>𝕏</span> Twitter/X Post
+            </h3>
+            <div className="bg-white p-6 rounded-xl border border-blue-200 mb-4">
+              <p className="text-slate-700 whitespace-pre-wrap leading-7">{result.socialSnippets?.twitter?.singleTweet}</p>
             </div>
-            <div className="flex gap-3 w-full md:w-auto">
-              <button
-                onClick={() => downloadBlog('markdown')}
-                className="flex-1 md:flex-none px-6 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold text-sm transition-colors"
-              >
-                Copy Markdown
-              </button>
-              <button
-                onClick={() => downloadBlog('html')}
-                className="flex-1 md:flex-none px-6 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-lg transition-all hover:-translate-y-0.5"
-              >
-                Download HTML
-              </button>
-            </div>
+            <button
+              onClick={() => copyToClipboard(result.socialSnippets?.twitter?.singleTweet)}
+              className="w-full px-6 py-3 rounded-full bg-blue-400 hover:bg-blue-500 text-white font-bold transition-colors"
+            >
+              📋 Copy Tweet
+            </button>
           </div>
-        </div>
+        )}
+
+        {/* LinkedIn Tab */}
+        {activeTab === 'linkedin' && (
+          <div className="bg-blue-50 p-8 rounded-2xl border border-blue-300">
+            <h3 className="font-bold text-2xl text-slate-900 mb-6 flex items-center gap-2">
+              <span>💼</span> LinkedIn Post
+            </h3>
+            <div className="bg-white p-6 rounded-xl border border-blue-300 mb-4">
+              <p className="text-slate-700 whitespace-pre-wrap leading-7">{result.socialSnippets?.linkedin}</p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(result.socialSnippets?.linkedin)}
+              className="w-full px-6 py-3 rounded-full bg-blue-700 hover:bg-blue-800 text-white font-bold transition-colors"
+            >
+              📋 Copy Post
+            </button>
+          </div>
+        )}
+
+        {/* Facebook Tab */}
+        {activeTab === 'facebook' && (
+          <div className="bg-blue-50 p-8 rounded-2xl border border-blue-200">
+            <h3 className="font-bold text-2xl text-slate-900 mb-6 flex items-center gap-2">
+              <span>👥</span> Facebook Post
+            </h3>
+            <div className="bg-white p-6 rounded-xl border border-blue-200 mb-4">
+              <p className="text-slate-700 whitespace-pre-wrap leading-7">{result.socialSnippets?.facebook}</p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(result.socialSnippets?.facebook)}
+              className="w-full px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors"
+            >
+              📋 Copy Post
+            </button>
+          </div>
+        )}
 
       </motion.main>
+
+      {/* Footer / Downloads */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-lg border-t border-slate-200 font-sans z-50">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="hidden md:block">
+            <button onClick={() => navigate('/')} className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
+              ← Back to Dashboard
+            </button>
+          </div>
+          <div className="flex gap-3 w-full md:w-auto">
+            <button
+              onClick={() => downloadBlog('markdown')}
+              className="flex-1 md:flex-none px-6 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold text-sm transition-colors"
+            >
+              Copy Markdown
+            </button>
+            <button
+              onClick={() => downloadBlog('html')}
+              className="flex-1 md:flex-none px-6 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-lg transition-all hover:-translate-y-0.5"
+            >
+              Download HTML
+            </button>
+          </div>
+        </div>
+      </div>
 
       <UploadModal onClose={() => setShowUpload(false)} isOpen={showUpload} />
     </div>

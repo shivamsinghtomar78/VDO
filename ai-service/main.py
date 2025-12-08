@@ -247,38 +247,46 @@ def transcribe_with_assemblyai(video_path: str) -> dict:
 # Blog Style Templates
 BLOG_TEMPLATES = {
     "standard": {
-        "name": "Standard Blog Post",
-        "prompt": "Create a professional blog post from this transcript.",
-        "structure": "Introduction, main content sections, and conclusion"
+        "name": "Medium Style Blog",
+        "prompt": """
+        Write a high-quality, engaging "Medium-style" blog post based on this transcript.
+        
+        TONE & STYLE:
+        - Write like a smart friend explaining a complex topic: clear, direct, and conversational.
+        - Use a professional yet accessible tone. Avoid academic jargon but don't be childish.
+        - Focus on storytelling and flow.
+        - Use short paragraphs and vary sentence length for rhythm.
+        
+        CRITICAL FORMATTING RULES:
+        - DO NOT include an "Author Profile", "Bio", "Date", or "Time" anywhere.
+        - DO NOT include a "Title", "H1", or "H2" in the content body (the title is a separate field).
+        - Start directly with a strong hook/introduction.
+        - Use formatting like bolding for emphasis, but don't overdo it.
+        """,
+        "structure": "Engaging Hook, Core Narrative/Argument, Key Insights (using subheaders), Practical Takeaways, Thought-Provoking Conclusion"
     },
-    "tutorial": {
-        "name": "Step-by-Step Tutorial",
-        "prompt": "Create a step-by-step tutorial guide from this transcript. Include numbered steps, prerequisites, and tips.",
-        "structure": "Prerequisites, Step-by-step instructions, Tips, Conclusion"
-    },
-    "listicle": {
-        "name": "Listicle (Top N List)",
-        "prompt": "Create an engaging listicle-style article from this transcript. Use numbered points with catchy subheadings.",
-        "structure": "Introduction, Numbered list items with explanations, Conclusion"
-    },
-    "howto": {
-        "name": "How-To Guide",
-        "prompt": "Create a practical how-to guide from this transcript. Focus on actionable advice and clear instructions.",
-        "structure": "Problem statement, Solution overview, Detailed steps, FAQs"
-    },
-    "opinion": {
-        "name": "Opinion/Analysis Piece",
-        "prompt": "Create an analytical opinion piece from this transcript. Include insights, perspectives, and supporting arguments.",
-        "structure": "Thesis, Analysis sections, Counter-arguments, Conclusion"
-    },
-    "news": {
-        "name": "News Article",
-        "prompt": "Create a news-style article from this transcript. Use inverted pyramid structure with key facts first.",
-        "structure": "Headline, Lead paragraph, Supporting details, Background"
+    "medium": { # Alias for standard
+        "name": "Medium Style Blog",
+        "prompt": """
+        Write a high-quality, engaging "Medium-style" blog post based on this transcript.
+        
+        TONE & STYLE:
+        - Write like a smart friend explaining a complex topic: clear, direct, and conversational.
+        - Use a professional yet accessible tone. Avoid academic jargon but don't be childish.
+        - Focus on storytelling and flow.
+        - Use short paragraphs and vary sentence length for rhythm.
+        
+        CRITICAL FORMATTING RULES:
+        - DO NOT include an "Author Profile", "Bio", "Date", or "Time" anywhere.
+        - DO NOT include a "Title", "H1", or "H2" in the content body (the title is a separate field).
+        - Start directly with a strong hook/introduction.
+        - Use formatting like bolding for emphasis, but don't overdo it.
+        """,
+        "structure": "Engaging Hook, Core Narrative/Argument, Key Insights (using subheaders), Practical Takeaways, Thought-Provoking Conclusion"
     }
 }
 
-def generate_summary_with_openrouter(transcript: str, template: str = "standard") -> dict:
+def generate_summary_with_openrouter(transcript: str, template: str = "medium") -> dict:
     """Generate blog summary using OpenRouter API.
     
     Returns: {'success': bool, 'data': dict or None, 'error': str or None}
@@ -287,8 +295,8 @@ def generate_summary_with_openrouter(transcript: str, template: str = "standard"
         logger.info('OpenRouter not configured - using mock blog generation')
         return {'success': False, 'data': None, 'error': 'OPENROUTER_API_KEY not set', 'mock': True}
     
-    # Get template configuration
-    template_config = BLOG_TEMPLATES.get(template, BLOG_TEMPLATES["standard"])
+    # Get template configuration - Default to 'medium'
+    template_config = BLOG_TEMPLATES.get(template, BLOG_TEMPLATES["medium"])
     template_prompt = template_config["prompt"]
     template_structure = template_config["structure"]
     
@@ -309,7 +317,7 @@ def generate_summary_with_openrouter(transcript: str, template: str = "standard"
                     "content": f"""{template_prompt} Structure it as: {template_structure}
 
 Return ONLY valid JSON with no escape characters or special formatting:
-{{"title":"Blog Title","sections":[{{"heading":"Section 1","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"],"seoScore":85,"readabilityScore":"Good"}}}}
+{{"title":"Attactive Blog Title (No 'Blog' in name)","sections":[{{"heading":"Section Heading","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"],"seoScore":85,"readabilityScore":"Good"}}}}
 
 Important: Do not use backslashes or special escape sequences in your response.
 
@@ -373,7 +381,6 @@ def generate_mystic_image(prompt: str) -> str:
         return None
 
     try:
-        # 1. Submit Generation Task
         url = "https://api.freepik.com/v1/ai/mystic"
         headers = {
             "x-freepik-api-key": FREEPIK_API_KEY,
@@ -403,7 +410,7 @@ def generate_mystic_image(prompt: str) -> str:
             
         logger.info(f"Mystic task started: {task_id}")
         
-        # 2. Poll for Completion
+        # Poll for completion
         max_retries = 30 # 30 seconds max
         for i in range(max_retries):
             time.sleep(1) # Wait 1 second between checks
@@ -420,26 +427,18 @@ def generate_mystic_image(prompt: str) -> str:
             if status == 'COMPLETED':
                 generated_images = status_data.get('generated', [])
                 if generated_images:
-                    image_url = generated_images[0].get('url') # Current API returns list of objects with url? Or list of strings?
-                    # Based on doc: "generated": ["url1", "url2"] usually, but let's verify if user provided specific response format.
-                    # User provided sample: "generated": ["https://...", "https://..."] in the 'data' object of the GET response.
-                    # Wait, the user provided documentation for POST response says "generated": [] empty initially.
-                    # GET response payload is same as POST but with data. 
-                    # Let's assume list of base64 or URLs. The doc says "generated": ["https://openapi-generator.tech"] in example.
-                    # So it's a list of strings (URLs).
+                    # Handle both potentially object or string list formats
+                    first_item = generated_images[0]
+                    image_url = None
                     
-                    if isinstance(generated_images[0], str):
-                         # If it's a string, it's the URL/Base64
-                         pass
-                    elif isinstance(generated_images[0], dict):
-                         # Just in case it's an object
-                         image_url = generated_images[0].get('url') or generated_images[0].get('base64')
-
-                    # Actually, the user sample shows: "generated": ["https://..."]
-                    if generated_images:
-                        final_url = generated_images[0]
-                        logger.info(f"Mystic generation completed: {final_url[:50]}...")
-                        return final_url
+                    if isinstance(first_item, dict):
+                         image_url = first_item.get('url') or first_item.get('base64')
+                    elif isinstance(first_item, str):
+                         image_url = first_item
+                    
+                    if image_url:
+                        logger.info(f"Mystic generation completed: {image_url[:50]}...")
+                        return image_url
                 
                 logger.warning("Mystic completed but no images found")
                 return None
@@ -457,32 +456,15 @@ def generate_mystic_image(prompt: str) -> str:
 
 def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
     """Generate image suggestions. Uses Mystic for the main hero image."""
-    
-    # 1. Generate one Hero Image using Mystic
-    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting"
-    if not blog_title:
-        hero_prompt = "cinematic photography of a modern professional workspace, 4k, detailed"
-        
+    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
     hero_image = generate_mystic_image(hero_prompt)
     
-    # Fallback if Mystic fails
-    if not hero_image:
-        hero_image = "https://placehold.co/1200x600?text=Hero+Image"
-
-    suggestions = [
-        {
-            "section": "Hero", 
-            "prompt": hero_prompt, 
-            "imageUrl": hero_image,
-            "type": "hero"
-        }
-    ]
-    
-    # We can add more placeholder/conventional images for sections if needed, 
-    # but for "Medium style" usually one big header is enough, or maybe one in the middle.
-    # Let's keep it clean with just the hero image for now as Mystic is expensive/slow.
-    
-    return suggestions
+    return [{
+        "section": "Hero", 
+        "prompt": hero_prompt, 
+        "imageUrl": hero_image,
+        "type": "hero"
+    }]
 
 def generate_mock_blog() -> dict:
     return {
@@ -649,19 +631,13 @@ def process_video():
         video_path = data.get('videoPath')
         
         logger.info(f"Processing video: {video_path} (Job: {job_id})")
-        logger.info(f"Current working directory: {os.getcwd()}")
-        logger.info(f"Video path is absolute: {os.path.isabs(video_path)}")
         
         # Convert relative path to absolute path if needed
         if not os.path.isabs(video_path):
-            # If path is relative, assume it's relative to backend directory
             backend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend')
             video_path = os.path.join(backend_dir, video_path)
-            logger.info(f"Converted to absolute path: {video_path}")
         
-        # Normalize path separators
         video_path = os.path.normpath(video_path)
-        logger.info(f"Normalized path: {video_path}")
         
         # Step 1: Transcribe video (try AssemblyAI first, then Deepgram as fallback)
         transcription_result = transcribe_with_assemblyai(video_path)
@@ -682,7 +658,7 @@ def process_video():
                 else:
                     transcript = "Sample transcript (transcription failed)"
         
-        # Step 2: Generate blog summary
+        # Step 2: Generate blog summary (Medium style)
         blog_generation_result = generate_summary_with_openrouter(transcript)
         blog_data = blog_generation_result.get('data')
         generation_warning = None
@@ -900,7 +876,7 @@ def process_youtube():
         job_id = data.get('jobId')
         youtube_url = data.get('youtubeUrl')
         
-        logger.info(f"Processing YouTube URL: {youtube_url} (Job: {job_id})")
+        logger.info(f"Processing YouTube URL: {youtube_url} (Job: {job_id}) - Medium style")
         
         # Extract video ID
         video_id = extract_youtube_video_id(youtube_url)
@@ -919,7 +895,7 @@ def process_youtube():
             logger.warning(f"YouTube transcription warning: {transcription_warning}")
             transcript = "Transcript not available for this video"
         
-        # Generate blog summary
+        # Generate blog summary (Medium style)
         blog_generation_result = generate_summary_with_openrouter(transcript)
         blog_data = blog_generation_result.get('data')
         generation_warning = None

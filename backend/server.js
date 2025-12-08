@@ -85,21 +85,18 @@ app.post('/api/upload-video', upload.single('video'), async (req, res) => {
       return res.status(400).json({ error: 'No video file provided' })
     }
 
-    const { template } = req.body
     const jobId = uuidv4()
     const videoPath = req.file.path
 
     console.log(`✓ Video uploaded: ${req.file.filename} (${(req.file.size / (1024 * 1024)).toFixed(2)} MB)`)
     console.log(`✓ Job ID: ${jobId}`)
-    console.log(`✓ Template: ${template || 'standard'}`)
 
     // Call Python service to process the video
     try {
       const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-video`, {
         jobId,
         videoPath,
-        filename: req.file.filename,
-        template: template || 'standard'
+        filename: req.file.filename
       }, {
         timeout: 300000 // 5 minute timeout for video processing
       })
@@ -182,7 +179,7 @@ app.get('/api/status/:jobId', (req, res) => {
  */
 app.post('/api/youtube-url', async (req, res) => {
   try {
-    const { youtubeUrl, template } = req.body
+    const { youtubeUrl } = req.body
 
     if (!youtubeUrl) {
       return res.status(400).json({ error: 'No YouTube URL provided' })
@@ -191,14 +188,12 @@ app.post('/api/youtube-url', async (req, res) => {
     const jobId = uuidv4()
     console.log(`✓ YouTube URL received: ${youtubeUrl}`)
     console.log(`✓ Job ID: ${jobId}`)
-    console.log(`✓ Template: ${template || 'standard'}`)
 
     // Call Python service to process the YouTube URL
     try {
       const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-youtube`, {
         jobId,
-        youtubeUrl,
-        template: template || 'standard'
+        youtubeUrl
       }, {
         timeout: 120000 // 2 minute timeout for YouTube processing
       })

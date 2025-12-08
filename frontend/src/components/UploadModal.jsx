@@ -12,33 +12,9 @@ export default function UploadModal({ onClose, isOpen = false }) {
   const [dragActive, setDragActive] = useState(false)
   const [file, setFile] = useState(null)
   const [youtubeUrl, setYoutubeUrl] = useState('')
-  const [templates, setTemplates] = useState({})
-  const [selectedTemplate, setSelectedTemplate] = useState('standard')
+  const selectedTemplate = 'standard' // Enforce Medium style
   const toast = useToast()
   const { isLoading, startLoading, stopLoading } = useLoading()
-
-  // Fetch templates on mount
-  useEffect(() => {
-    fetch('/api/templates')
-      .then(res => res.json())
-      .then(data => {
-        if (data.templates) {
-          setTemplates(data.templates)
-        }
-      })
-      .catch(err => {
-        console.warn('Failed to fetch templates, using defaults', err)
-        // Fallback defaults
-        setTemplates({
-          'standard': { name: 'Standard Blog Post', description: 'Balanced summary and analysis' },
-          'tutorial': { name: 'Step-by-Step Tutorial', description: 'Instructional content' },
-          'listicle': { name: 'Listicle / Top 10', description: 'List-based format' },
-          'howto': { name: 'How-To Guide', description: 'Practical guide' },
-          'opinion': { name: 'Opinion / Analysis', description: 'Critical perspective' },
-          'news': { name: 'News / Update', description: 'Journalistic style' }
-        })
-      })
-  }, [])
 
   if (!isOpen) return null
 
@@ -91,7 +67,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
     toast.info('📤 Uploading your video...')
 
     try {
-      const data = await uploadVideo(file, selectedTemplate)
+      const data = await uploadVideo(file)
       console.log('Upload successful, data:', data)
 
       if (data.isMockData) {
@@ -126,7 +102,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
     toast.info('📺 Fetching YouTube transcript...')
 
     try {
-      const data = await processYouTubeUrl(youtubeUrl, selectedTemplate)
+      const data = await processYouTubeUrl(youtubeUrl)
       console.log('YouTube processing successful, data:', data)
 
       if (data.warnings && data.warnings.length > 0) {
@@ -315,30 +291,9 @@ export default function UploadModal({ onClose, isOpen = false }) {
                     </div>
                   )}
 
-                  {/* Template Selection */}
-                  <div className="mt-8">
-                    <label className="block text-sm font-semibold text-gray-300 mb-3 pl-1">
-                      Choose Blog Style
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(templates).map(([key, template]) => (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedTemplate(key)}
-                          className={`p-3 rounded-xl border text-left transition-all duration-200 ${selectedTemplate === key
-                            ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/50'
-                            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
-                            }`}
-                        >
-                          <div className="font-semibold text-sm text-gray-200 mb-0.5">
-                            {template.name}
-                          </div>
-                          <div className="text-xs text-gray-500 line-clamp-1">
-                            {template.description}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                  {/* Template Selection Removed for Medium Style Default */}
+                  <div className="mt-2 text-center text-sm text-gray-500 italic">
+                    ✨ Creating a professional Medium-style article
                   </div>
                 </div>
 
