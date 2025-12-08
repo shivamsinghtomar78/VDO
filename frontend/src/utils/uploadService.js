@@ -95,7 +95,7 @@ export async function processYouTubeUrl(youtubeUrl, template = 'standard') {
   const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout
 
   try {
-    const response = await fetch('/api/youtube-url', {
+    const response = await fetch('/api/process-youtube', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

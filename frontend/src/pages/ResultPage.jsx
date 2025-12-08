@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
-import BackgroundMusic from '../components/BackgroundMusic'
 import { MOCK_RESULT } from '../utils/mockData'
 import heroBg from '../assets/hero-bg.png'
 
@@ -46,7 +45,6 @@ export default function ResultPage() {
   if (!result) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
-        <BackgroundMusic src="/audio/song2.mp3" />
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[120px] animate-blob" />
           <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/20 rounded-full blur-[120px] animate-blob animation-delay-2000" />
@@ -94,7 +92,7 @@ export default function ResultPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] relative selection:bg-emerald-500/30">
-      <BackgroundMusic src="/audio/song2.mp3" />
+
       {/* Background Image */}
       <div className="fixed inset-0 z-0">
         <img

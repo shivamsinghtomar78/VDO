@@ -727,8 +727,33 @@ def transcribe_youtube(video_id: str) -> dict:
     """
     logger.info(f"Fetching YouTube transcript for video: {video_id}")
     
-    # Strategy 1: Fast direct fetch (youtube-transcript-api)
+    # Method 1: Try with youtube-transcript-api (with Proxy Support)
     try:
+        # Configure proxy if available
+        proxies = os.getenv('PROXY_LIST', '').split(',')
+        proxies = [p.strip() for p in proxies if p.strip()]
+        
+        ytt_api = None
+        if proxies:
+            from youtube_transcript_api.proxies import GenericProxyConfig
+            proxy_url = random.choice(proxies)
+            logger.info(f"Using proxy for youtube-transcript-api: {proxy_url}")
+            
+            # Identify protocol
+            http_proxy = proxy_url
+            https_proxy = proxy_url
+            if not proxy_url.startswith('http'):
+                http_proxy = f"http://{proxy_url}"
+                https_proxy = f"http://{proxy_url}"
+            
+            proxy_config = GenericProxyConfig(
+                http_url=http_proxy,
+                https_url=https_proxy
+            )
+            ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+        else:
+            ytt_api = YouTubeTranscriptApi()
+
         # Try multiple languages
         languages_to_try = [
             ['en', 'en-US', 'en-GB'],
@@ -736,9 +761,10 @@ def transcribe_youtube(video_id: str) -> dict:
             ['es', 'fr', 'de', 'pt', 'ru', 'ja', 'ko']
         ]
         
+        # 1.1 Try direct fetch
         for langs in languages_to_try:
             try:
-                transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+                transcript_data = ytt_api.get_transcript(video_id, languages=langs)
                 full_text = ' '.join([segment['text'] for segment in transcript_data])
                 if full_text.strip():
                     logger.info(f"✓ YouTube transcript fetched (API): {len(full_text)} chars")
@@ -746,8 +772,23 @@ def transcribe_youtube(video_id: str) -> dict:
             except Exception:
                 continue
                 
+        # 1.2 Try listing transcripts
+        try:
+            transcript_list = ytt_api.list_transcripts(video_id)
+            for transcript in transcript_list:
+                try:
+                    transcript_data = transcript.fetch()
+                    full_text = ' '.join([segment['text'] for segment in transcript_data])
+                    if full_text.strip():
+                        logger.info(f"✓ YouTube transcript fetched (List): {len(full_text)} chars")
+                        return {'success': True, 'text': full_text, 'error': None}
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning(f"List transcripts failed: {e}")
+
     except Exception as e:
-        logger.warning(f"Strategy 1 failed: {e}")
+        logger.warning(f"Strategy 1 (API) failed: {e}")
 
     # Strategy 2: yt-dlp (Most Reliable)
     try:
@@ -769,12 +810,12 @@ def transcribe_youtube(video_id: str) -> dict:
             ]
             
             # Add proxy if configured
-            proxy_list = os.getenv('PROXY_LIST', '').split(',')
-            proxy_list = [p.strip() for p in proxy_list if p.strip()]
-            if proxy_list:
-                proxy = random.choice(proxy_list)
+            proxies = os.getenv('PROXY_LIST', '').split(',')
+            proxies = [p.strip() for p in proxies if p.strip()]
+            if proxies:
+                proxy = random.choice(proxies)
                 cmd.extend(['--proxy', proxy])
-                logger.info(f"Using proxy: {proxy}")
+                logger.info(f"Using proxy for yt-dlp: {proxy}")
             
             # Run yt-dlp
             result = subprocess.run(
@@ -788,24 +829,19 @@ def transcribe_youtube(video_id: str) -> dict:
                 logger.warning(f"yt-dlp failed: {result.stderr}")
             
             # 2. Parse the downloaded VTT file
-            # Check for any .vtt file in the temp dir
             vtt_files = [f for f in os.listdir(temp_dir) if f.endswith('.vtt')]
             
             if vtt_files:
                 vtt_path = os.path.join(temp_dir, vtt_files[0])
                 logger.info(f"Parsing VTT file: {vtt_path}")
                 
-                # Simple VTT parser to extract text
                 lines = []
                 with open(vtt_path, 'r', encoding='utf-8') as f:
                     for line in f:
                         line = line.strip()
-                        # Skip timestamp lines and metadata
                         if '-->' in line or not line or line.startswith('WEBVTT') or line.startswith('NOTE'):
                             continue
-                        # Remove tags like <c.colorE5E5E5>
                         line = re.sub(r'<[^>]+>', '', line)
-                        # Avoid duplicates (captions often repeat)
                         if not lines or lines[-1] != line:
                             lines.append(line)
                 
