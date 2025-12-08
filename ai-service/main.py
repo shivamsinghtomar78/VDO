@@ -411,7 +411,7 @@ def generate_mystic_image(prompt: str) -> str:
         logger.info(f"Mystic task started: {task_id}")
         
         # Poll for completion
-        max_retries = 30 # 30 seconds max
+        max_retries = 60 # Increased to 60 seconds
         for i in range(max_retries):
             time.sleep(1) # Wait 1 second between checks
             
@@ -455,16 +455,61 @@ def generate_mystic_image(prompt: str) -> str:
         return None
 
 def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
-    """Generate image suggestions. Uses Mystic for the main hero image."""
-    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
+    """Generate multiple image suggestions (Hero + 2 section images)."""
+    suggestions = []
+    
+    # 1. Hero Image
+    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting, photorealistic" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
+    logger.info("Generating Hero Image...")
     hero_image = generate_mystic_image(hero_prompt)
     
-    return [{
-        "section": "Hero", 
-        "prompt": hero_prompt, 
-        "imageUrl": hero_image,
-        "type": "hero"
-    }]
+    if hero_image:
+        suggestions.append({
+            "section": "Hero", 
+            "prompt": hero_prompt, 
+            "imageUrl": hero_image,
+            "type": "hero"
+        })
+    else:
+        suggestions.append({
+            "section": "Hero", 
+            "prompt": hero_prompt, 
+            "imageUrl": "https://placehold.co/1200x600?text=Hero+Image+Generation+Failed",
+            "type": "hero"
+        })
+
+    # 2. Section Image (from the second section if available, else first)
+    if sections and len(sections) > 0:
+        # Use 2nd section if available, else 1st
+        target_section = sections[1] if len(sections) > 1 else sections[0]
+        heading = target_section.get('heading', 'Topic')
+        section_prompt = f"editorial photography representing {heading}, minimal, clean, professional medium style, high quality"
+        
+        logger.info(f"Generating Section Image for: {heading}...")
+        section_image = generate_mystic_image(section_prompt)
+        
+        if section_image:
+             suggestions.append({
+                "section": heading, 
+                "prompt": section_prompt, 
+                "imageUrl": section_image,
+                "type": "section"
+            })
+
+    # 3. Conclusion/Abstract Image
+    conclusion_prompt = "abstract artistic representation of future technology and success, minimal, elegant, soft lighting, 4k"
+    logger.info("Generating Conclusion Image...")
+    conclusion_image = generate_mystic_image(conclusion_prompt)
+    
+    if conclusion_image:
+        suggestions.append({
+            "section": "Footer", 
+            "prompt": conclusion_prompt, 
+            "imageUrl": conclusion_image,
+            "type": "footer"
+        })
+    
+    return suggestions
 
 def generate_mock_blog() -> dict:
     return {
