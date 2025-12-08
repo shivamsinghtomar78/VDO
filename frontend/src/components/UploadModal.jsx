@@ -173,7 +173,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
                     <span className="text-3xl">{activeTab === 'upload' ? '☁️' : '📺'}</span>
                   </div>
                   <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-                    {activeTab === 'upload' ? 'Upload Video' : 'YouTube URL'}
+                    {activeTab === 'upload' ? 'Upload Video' : 'Paste Link'}
                   </h2>
                   <p className="text-gray-400">Transform your content into a viral blog post</p>
                 </div>
@@ -196,7 +196,7 @@ export default function UploadModal({ onClose, isOpen = false }) {
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                       }`}
                   >
-                    📺 YouTube URL
+                    📺 Video URL
                   </button>
                 </div>
 
@@ -326,8 +326,8 @@ export default function UploadModal({ onClose, isOpen = false }) {
                           key={key}
                           onClick={() => setSelectedTemplate(key)}
                           className={`p-3 rounded-xl border text-left transition-all duration-200 ${selectedTemplate === key
-                              ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/50'
-                              : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
+                            ? 'bg-blue-600/20 border-blue-500/50 ring-1 ring-blue-500/50'
+                            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
                             }`}
                         >
                           <div className="font-semibold text-sm text-gray-200 mb-0.5">

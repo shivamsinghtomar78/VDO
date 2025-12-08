@@ -1,51 +1,11 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Navigation } from '../components/Layout'
 import UploadModal from '../components/UploadModal'
-import { processYouTubeUrl } from '../utils/uploadService'
-import { useToast } from '../components/Toast'
-import { useLoading } from '../utils/loadingContext'
 import heroBg from '../assets/hero-bg.png'
 
 export default function HeroPage() {
   const [showUpload, setShowUpload] = useState(false)
-  const [youtubeUrl, setYoutubeUrl] = useState('')
-  const navigate = useNavigate()
-  const toast = useToast()
-  const { isLoading, startLoading, stopLoading } = useLoading()
-
-  const handleYouTubeSubmit = async (e) => {
-    e.preventDefault()
-    if (!youtubeUrl) return
-
-    // Simple validation
-    const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|shorts\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}/
-    if (!pattern.test(youtubeUrl)) {
-      toast.error('❌ Invalid YouTube URL. Please enter a valid video link.')
-      return
-    }
-
-    startLoading('🚀 Analyzing video content...')
-    toast.info('📺 Fetching transcript & generating blog...')
-
-    try {
-      const data = await processYouTubeUrl(youtubeUrl, 'standard')
-
-      if (data.warnings && data.warnings.length > 0) {
-        data.warnings.forEach(w => toast.warning(`⚠️ ${w}`))
-      } else {
-        toast.success('✨ Blog post generated successfully!')
-      }
-
-      stopLoading()
-      navigate('/results', { state: { resultData: data } })
-    } catch (error) {
-      console.error('YouTube error:', error)
-      toast.error(`❌ ${error.message || 'Failed to process video.'}`)
-      stopLoading()
-    }
-  }
 
   return (
     <div className="min-h-screen bg-[#020617] relative overflow-hidden selection:bg-emerald-500/30 font-sans">
@@ -103,53 +63,26 @@ export default function HeroPage() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed"
           >
-            Instantly convert any YouTube video into SEO-optimized articles, social media threads, and ready-to-publish content.
+            Instantly convert any video into SEO-optimized articles, social media threads, and ready-to-publish content.
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="w-full max-w-2xl mx-auto relative group"
+            className="flex flex-col sm:flex-row gap-6 justify-center items-center"
           >
-            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-            <form onSubmit={handleYouTubeSubmit} className="relative flex items-center bg-[#0f172a]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl">
-              <div className="pl-4 text-2xl">🔗</div>
-              <input
-                type="text"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="Paste YouTube Link (e.g. youtube.com/watch?v=...)"
-                className="flex-1 bg-transparent border-none text-white placeholder-gray-500 text-lg px-4 py-3 focus:ring-0 focus:outline-none w-full"
-                disabled={isLoading}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !youtubeUrl}
-                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  "Generate ✨"
-                )}
-              </button>
-            </form>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-6 text-gray-500 text-sm"
-          >
-            Or <button onClick={() => setShowUpload(true)} className="text-emerald-400 hover:text-emerald-300 font-medium underline underline-offset-4 decoration-emerald-500/30 hover:decoration-emerald-500 transition-all">upload a video file</button> directly
+            <motion.button
+              onClick={() => setShowUpload(true)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="group relative px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl font-bold text-lg text-white shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all duration-300 w-full sm:w-auto overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              <span className="relative flex items-center justify-center gap-2">
+                🚀 Start Creating
+              </span>
+            </motion.button>
           </motion.div>
         </div>
 
