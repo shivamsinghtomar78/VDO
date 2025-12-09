@@ -1,8 +1,8 @@
 import { validateUploadResponse } from './validation'
 
 const TIMEOUT = 300000 // 5 minutes for video processing
-const MAX_RETRIES = 1 // Don't retry since processing takes long
-const RETRY_DELAY = 1000 // 1 second
+const MAX_RETRIES = 2 // Retry once for cold start
+const RETRY_DELAY = 5000 // 5 seconds between retries
 
 export async function uploadVideo(file, onProgress) {
   let lastError
@@ -90,12 +90,14 @@ async function uploadWithTimeout(file, onProgress) {
   }
 }
 
-export async function processYouTubeUrl(youtubeUrl) {
+export async function processYouTubeUrl(youtubeUrl, isRetry = false) {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout
+  const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minute timeout
 
   try {
     const apiUrl = import.meta.env.VITE_API_URL || ''
+    console.log(`Processing YouTube URL: ${youtubeUrl} (retry: ${isRetry})`)
+
     const response = await fetch(`${apiUrl}/api/process-youtube`, {
       method: 'POST',
       headers: {
@@ -144,8 +146,24 @@ export async function processYouTubeUrl(youtubeUrl) {
     return enrichedData
   } catch (error) {
     console.error('YouTube processing error:', error.message)
+
+    // Retry once if it's a network error (cold start scenario)
+    if (!isRetry && (error.name === 'AbortError' || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+      console.log('Retrying due to possible cold start...')
+      clearTimeout(timeoutId)
+      // Wait 5 seconds for server to wake up, then retry
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      return processYouTubeUrl(youtubeUrl, true)
+    }
+
+    // Provide better error message for timeout
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be starting up - please try again.')
+    }
+
     throw error
   } finally {
     clearTimeout(timeoutId)
   }
 }
+
