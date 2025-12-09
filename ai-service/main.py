@@ -33,8 +33,6 @@ logger = logging.getLogger(__name__)
 
 DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-FREEPIK_API_KEY = os.getenv('FREEPIK_API_KEY')
-
 
 # Log available APIs on startup
 if DEEPGRAM_API_KEY:
@@ -46,16 +44,6 @@ if OPENROUTER_API_KEY:
     logger.info('✓ OpenRouter API key configured')
 else:
     logger.warning('⚠ OpenRouter API key NOT set - blog generation will use mock data')
-
-if FREEPIK_API_KEY:
-    logger.info('✓ Freepik API key configured')
-else:
-    logger.warning('⚠ Freepik API key NOT set - image suggestions will use mock data')
-
-if ASSEMBLYAI_API_KEY:
-    logger.info('✓ AssemblyAI API key configured')
-else:
-    logger.warning('⚠ AssemblyAI API key NOT set')
 
 # Log proxy configuration
 proxy_list = os.getenv('PROXY_LIST', '')
