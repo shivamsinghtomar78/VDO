@@ -13,7 +13,7 @@ import tempfile
 import random
 import time
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 try:
     from youtube_transcript_api.proxies import WebshareProxyConfig, GenericProxyConfig
@@ -394,149 +394,6 @@ Transcript: {transcript[:30000]}"""
         logger.error(error_msg)
         return {'success': False, 'data': None, 'error': error_msg}
 
-def generate_mystic_image(prompt: str) -> str:
-    """Generate a single image using Freepik Mystic API with polling."""
-    if not FREEPIK_API_KEY:
-        logger.warning("Freepik API key not set, skipping Mystic generation")
-        return None
-
-    try:
-        url = "https://api.freepik.com/v1/ai/mystic"
-        headers = {
-            "x-freepik-api-key": FREEPIK_API_KEY,
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "prompt": prompt,
-            "resolution": "2k",
-            "aspect_ratio": "widescreen_16_9",
-            "model": "realism",
-            "filter_nsfw": True
-        }
-        
-        logger.info(f"Submitting Mystic task for: {prompt[:50]}...")
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code != 200:
-            logger.error(f"Mystic submission failed: {response.text}")
-            return None
-            
-        task_data = response.json().get('data', {})
-        task_id = task_data.get('task_id')
-        
-        if not task_id:
-            logger.error("No task_id received from Mystic API")
-            return None
-            
-        logger.info(f"Mystic task started: {task_id}")
-        
-        # Poll for completion
-        max_retries = 300 # Increased to 300 seconds (5 minutes)
-        for i in range(max_retries):
-            time.sleep(1) # Wait 1 second between checks
-            
-            check_url = f"https://api.freepik.com/v1/ai/mystic/{task_id}"
-            check_response = requests.get(check_url, headers=headers, timeout=10)
-            
-            if check_response.status_code != 200:
-                continue
-                
-            status_data = check_response.json().get('data', {})
-            status = status_data.get('status')
-            
-            if status == 'COMPLETED':
-                generated_images = status_data.get('generated', [])
-                if generated_images:
-                    # Handle both potentially object or string list formats
-                    first_item = generated_images[0]
-                    image_url = None
-                    
-                    if isinstance(first_item, dict):
-                         image_url = first_item.get('url') or first_item.get('base64')
-                    elif isinstance(first_item, str):
-                         image_url = first_item
-                    
-                    if image_url:
-                        logger.info(f"Mystic generation completed: {image_url[:50]}...")
-                        return image_url
-                
-                logger.warning("Mystic completed but no images found")
-                return None
-                
-            elif status == 'FAILED':
-                logger.error("Mystic generation failed")
-                return None
-        
-        logger.warning("Mystic generation timed out")
-        return None
-
-    except Exception as e:
-        logger.error(f"Mystic generation error: {e}")
-        return None
-
-def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
-    """Generate multiple image suggestions (Hero + 2 section images) in parallel."""
-    suggestions = []
-    
-    # Define tasks
-    def generate_hero():
-        hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting, photorealistic" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
-        logger.info("Generating Hero Image...")
-        image = generate_mystic_image(hero_prompt)
-        return {
-            "section": "Hero",
-            "prompt": hero_prompt,
-            "imageUrl": image if image else "https://placehold.co/1200x600?text=Hero+Image+Generation+Failed",
-            "type": "hero"
-        }
-
-    def generate_section():
-        if sections and len(sections) > 0:
-            target_section = sections[1] if len(sections) > 1 else sections[0]
-            heading = target_section.get('heading', 'Topic')
-            section_prompt = f"editorial photography representing {heading}, minimal, clean, professional medium style, high quality"
-            logger.info(f"Generating Section Image for: {heading}...")
-            image = generate_mystic_image(section_prompt)
-            return {
-                "section": heading,
-                "prompt": section_prompt,
-                "imageUrl": image if image else "https://placehold.co/1200x600?text=Section+Image+Failed",
-                "type": "section"
-            }
-        return None
-
-    def generate_footer():
-        conclusion_prompt = "abstract artistic representation of future technology and success, minimal, elegant, soft lighting, 4k"
-        logger.info("Generating Conclusion Image...")
-        image = generate_mystic_image(conclusion_prompt)
-        return {
-            "section": "Footer",
-            "prompt": conclusion_prompt,
-            "imageUrl": image if image else "https://placehold.co/1200x600?text=Footer+Image+Failed",
-            "type": "footer"
-        }
-
-    # Execute in parallel
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [
-            executor.submit(generate_hero),
-            executor.submit(generate_section),
-            executor.submit(generate_footer)
-        ]
-        
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                if result:
-                    suggestions.append(result)
-            except Exception as e:
-                logger.error(f"Image generation task failed: {e}")
-
-    # Sort suggestions to maintain order (Hero, Section, Footer)
-    type_order = {"hero": 0, "section": 1, "footer": 2}
-    suggestions.sort(key=lambda x: type_order.get(x["type"], 99))
-    
-    return suggestions
 
 def generate_mock_blog() -> dict:
     return {
@@ -553,10 +410,7 @@ def generate_mock_blog() -> dict:
             "seoScore": 75,
             "readabilityScore": "Good"
         },
-        "imageSuggestions": [
-            {"section": "Introduction", "prompt": "Professional header"},
-            {"section": "Main Points", "prompt": "Key points infographic"}
-        ]
+        "imageSuggestions": []
     }
 
 # Export Functions
@@ -762,7 +616,7 @@ def process_video():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": [], # Image generation disabled by user request
+            "imageSuggestions": [], # Image generation removed for performance
             "socialSnippets": generate_social_snippets(blog_data),
             "availableExports": ["markdown", "html", "wordpress"]
         }
@@ -1045,7 +899,7 @@ def process_youtube():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": [], # Image generation disabled by user request
+            "imageSuggestions": [], # Image generation removed for performance
             "socialSnippets": generate_social_snippets(blog_data),
             "availableExports": ["markdown", "html", "wordpress"]
         }

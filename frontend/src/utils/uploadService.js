@@ -29,7 +29,8 @@ async function uploadWithTimeout(file, onProgress) {
     const formData = new FormData()
     formData.append('video', file)
 
-    const uploadUrl = '/api/upload-video'
+    const apiUrl = import.meta.env.VITE_API_URL || ''
+    const uploadUrl = `${apiUrl}/api/upload-video`
     console.log('Uploading to:', uploadUrl)
 
     const response = await fetch(uploadUrl, {
@@ -94,7 +95,8 @@ export async function processYouTubeUrl(youtubeUrl) {
   const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout
 
   try {
-    const response = await fetch('/api/process-youtube', {
+    const apiUrl = import.meta.env.VITE_API_URL || ''
+    const response = await fetch(`${apiUrl}/api/process-youtube`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

@@ -63,7 +63,8 @@ export default function ResultPage() {
   const heroImage = result.imageSuggestions?.find(img => img.type === 'hero' || img.section === 'Hero')?.imageUrl || result.imageSuggestions?.[0]?.imageUrl
 
   const downloadBlog = (format) => {
-    fetch('/api/export', {
+    const apiUrl = import.meta.env.VITE_API_URL || ''
+    fetch(`${apiUrl}/api/export`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blog: result.blog, format: format })
