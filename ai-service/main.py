@@ -66,7 +66,13 @@ if not os.path.exists(STATIC_FOLDER):
 logger.info(f"Static folder path: {STATIC_FOLDER} (exists: {os.path.exists(STATIC_FOLDER)})")
 
 app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='')
-CORS(app, origins=["*"])
+
+# Configure Flask for file uploads
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB max file size
+
+# Configure CORS properly for all origins
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
+
 
 @app.route('/health', methods=['GET'])
 def health():
