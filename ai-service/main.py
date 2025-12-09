@@ -60,6 +60,17 @@ if ASSEMBLYAI_API_KEY:
 else:
     logger.warning('⚠ AssemblyAI API key NOT set')
 
+# Log proxy configuration
+proxy_list = os.getenv('PROXY_LIST', '')
+webshare_user = os.getenv('WEBSHARE_PROXY_USERNAME', '')
+if webshare_user:
+    logger.info(f'✓ Webshare proxy configured (username: {webshare_user[:4]}...)')
+elif proxy_list:
+    proxy_count = len([p for p in proxy_list.split(',') if p.strip()])
+    logger.info(f'✓ Generic proxy configured ({proxy_count} proxies in PROXY_LIST)')
+else:
+    logger.warning('⚠ No proxy configured - YouTube transcription may fail on cloud servers')
+
 # Determine static folder path for serving React frontend
 # Look for frontend/dist relative to this file's directory (ai-service)
 STATIC_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
@@ -769,7 +780,9 @@ def transcribe_youtube(video_id: str) -> dict:
             logger.warning(f"List transcripts failed: {e}")
 
     except Exception as e:
-        logger.warning(f"Strategy 1 (API) failed: {e}")
+        logger.warning(f"Strategy 1 (API) failed: {str(e)}")
+        import traceback
+        logger.warning(f"Full traceback: {traceback.format_exc()}")
 
     # Strategy 2: yt-dlp (Most Reliable)
     try:
