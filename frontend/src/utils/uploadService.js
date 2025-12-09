@@ -29,9 +29,12 @@ async function uploadWithTimeout(file, onProgress) {
     const formData = new FormData()
     formData.append('video', file)
 
-    const apiUrl = import.meta.env.VITE_API_URL || ''
-    const uploadUrl = `${apiUrl}/api/upload-video`
-    console.log('Uploading to:', uploadUrl)
+    // FORCE RELATIVE PATH: Ignore VITE_API_URL
+    const apiUrl = ''
+    const uploadUrl = '/api/upload-video'
+    const fullUrl = `${window.location.origin}${uploadUrl}`
+
+    console.log('Uploading to:', fullUrl) // Debug log for user
 
     const response = await fetch(uploadUrl, {
       method: 'POST',
@@ -95,10 +98,13 @@ export async function processYouTubeUrl(youtubeUrl, isRetry = false) {
   const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minute timeout
 
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || ''
+    // FORCE RELATIVE PATH: Ignore VITE_API_URL to ensure we hit the same origin
+    const apiUrl = ''
+    const fullUrl = `${window.location.origin}/api/process-youtube`
     console.log(`Processing YouTube URL: ${youtubeUrl} (retry: ${isRetry})`)
+    console.log(`Requesting: ${fullUrl}`) // Debug log for user
 
-    const response = await fetch(`${apiUrl}/api/process-youtube`, {
+    const response = await fetch('/api/process-youtube', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
