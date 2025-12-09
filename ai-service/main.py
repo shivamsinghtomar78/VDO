@@ -87,6 +87,117 @@ CORS(app, origins=["*"])
 def health():
     return jsonify({"status": "ok"})
 
+# Setup uploads directory for video files
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
+if not os.path.exists(UPLOADS_DIR):
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    logger.info(f"Created uploads directory: {UPLOADS_DIR}")
+
+@app.route('/api/upload-video', methods=['POST'])
+def upload_video():
+    """Handle video file upload and process it."""
+    import uuid
+    try:
+        if 'video' not in request.files:
+            return jsonify({"error": "No video file provided"}), 400
+        
+        video_file = request.files['video']
+        if video_file.filename == '':
+            return jsonify({"error": "No video file selected"}), 400
+        
+        # Generate unique filename
+        job_id = str(uuid.uuid4())
+        ext = os.path.splitext(video_file.filename)[1]
+        safe_filename = f"{job_id}{ext}"
+        video_path = os.path.join(UPLOADS_DIR, safe_filename)
+        
+        # Save the file
+        video_file.save(video_path)
+        file_size = os.path.getsize(video_path)
+        logger.info(f"✓ Video uploaded: {safe_filename} ({file_size / (1024*1024):.2f} MB)")
+        logger.info(f"✓ Job ID: {job_id}")
+        
+        try:
+            # Process the video directly (transcription + blog generation)
+            # Step 1: Transcribe video (try AssemblyAI first, then Deepgram as fallback)
+            transcription_result = transcribe_with_assemblyai(video_path)
+            transcript = transcription_result.get('text')
+            transcription_warning = None
+            
+            if not transcription_result.get('success'):
+                logger.warning(f"AssemblyAI failed: {transcription_result.get('error')}, trying Deepgram...")
+                transcription_result = transcribe_with_deepgram(video_path)
+                transcript = transcription_result.get('text')
+                
+                if not transcription_result.get('success'):
+                    transcription_warning = transcription_result.get('error')
+                    if transcription_result.get('mock'):
+                        transcript = "Sample transcript (APIs not configured)"
+                    else:
+                        transcript = "Sample transcript (transcription failed)"
+            
+            # Step 2: Generate blog summary (Medium style)
+            blog_generation_result = generate_summary_with_openrouter(transcript)
+            blog_data = blog_generation_result.get('data')
+            generation_warning = None
+            
+            if not blog_generation_result.get('success'):
+                generation_warning = blog_generation_result.get('error')
+                blog_data = generate_mock_blog()
+            
+            # Build response
+            seo_data = blog_data.get("seo", {})
+            full_blog = {
+                "title": blog_data.get("title", "Untitled"),
+                "sections": blog_data.get("sections", [])
+            }
+            
+            result = {
+                "jobId": job_id,
+                "status": "completed",
+                "transcript": transcript,
+                "blog": full_blog,
+                "seo": {
+                    "title": seo_data.get("title", "Blog Title"),
+                    "metaDescription": seo_data.get("metaDescription", "Description"),
+                    "keywords": seo_data.get("keywords", []),
+                    "seoScore": seo_data.get("seoScore", 75),
+                    "readabilityScore": seo_data.get("readabilityScore", "Good")
+                },
+                "imageSuggestions": [],
+                "socialSnippets": generate_social_snippets(blog_data),
+                "availableExports": ["markdown", "html", "wordpress"]
+            }
+            
+            # Add warnings if using fallbacks
+            warnings = []
+            if transcription_warning:
+                warnings.append(f"Transcription: {transcription_warning}")
+            if generation_warning:
+                warnings.append(f"Blog Generation: {generation_warning}")
+            
+            if warnings:
+                result["warnings"] = warnings
+                logger.info(f"Processed with warnings: {warnings}")
+            else:
+                logger.info(f"✓ Video processed successfully")
+            
+            return jsonify(result), 200
+            
+        finally:
+            # Clean up uploaded file
+            try:
+                if os.path.exists(video_path):
+                    os.remove(video_path)
+                    logger.info(f"✓ Cleaned up file: {safe_filename}")
+            except Exception as e:
+                logger.warning(f"Could not delete uploaded file: {e}")
+                
+    except Exception as e:
+        error_msg = f"Upload processing error: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({"error": error_msg}), 500
+
 @app.route('/api/templates', methods=['GET'])
 def get_templates():
     """Get available blog templates."""

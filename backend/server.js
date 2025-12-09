@@ -18,13 +18,9 @@ const PORT = process.env.PORT || 5000
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000'
 
 // Middleware
+// Allow all origins for production deployment on Render
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
+  origin: true, // Allow all origins
   credentials: true
 }))
 app.use(express.json())
@@ -174,7 +170,67 @@ app.get('/api/status/:jobId', (req, res) => {
 })
 
 /**
- * Process YouTube URL endpoint
+ * Process YouTube URL endpoint (primary route used by frontend)
+ * POST /api/process-youtube
+ */
+app.post('/api/process-youtube', async (req, res) => {
+  try {
+    const { youtubeUrl } = req.body
+
+    if (!youtubeUrl) {
+      return res.status(400).json({ error: 'No YouTube URL provided' })
+    }
+
+    console.log(`✓ YouTube URL received: ${youtubeUrl}`)
+
+    // Call Python service to process the YouTube URL
+    try {
+      const response = await axios.post(`${PYTHON_SERVICE_URL}/api/process-youtube`, {
+        jobId: require('uuid').v4(),
+        youtubeUrl
+      }, {
+        timeout: 120000 // 2 minute timeout for YouTube processing
+      })
+
+      console.log(`✓ YouTube processing completed`)
+      const result = response.data
+
+      // Ensure response has all required fields
+      const finalResult = {
+        jobId: result.jobId,
+        status: result.status || 'completed',
+        source: 'youtube',
+        videoId: result.videoId || '',
+        transcript: result.transcript || '',
+        blog: result.blog || { title: '', sections: [] },
+        seo: result.seo || {
+          title: '',
+          metaDescription: '',
+          keywords: [],
+          seoScore: 0,
+          readabilityScore: 0
+        },
+        imageSuggestions: result.imageSuggestions || [],
+        warnings: result.warnings || [],
+        socialSnippets: result.socialSnippets || {},
+        availableExports: result.availableExports || []
+      }
+
+      res.json(finalResult)
+    } catch (pythonError) {
+      console.error('Error calling Python service for YouTube:', pythonError.message)
+      res.status(500).json({
+        error: 'AI service unavailable for YouTube processing'
+      })
+    }
+  } catch (error) {
+    console.error('YouTube URL error:', error)
+    res.status(500).json({ error: 'Error processing YouTube URL: ' + error.message })
+  }
+})
+
+/**
+ * Process YouTube URL endpoint (legacy route)
  * POST /api/youtube-url
  */
 app.post('/api/youtube-url', async (req, res) => {
