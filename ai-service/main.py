@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
@@ -60,7 +60,16 @@ if ASSEMBLYAI_API_KEY:
 else:
     logger.warning('⚠ AssemblyAI API key NOT set')
 
-app = Flask(__name__)
+# Determine static folder path for serving React frontend
+# Look for frontend/dist relative to this file's directory (ai-service)
+STATIC_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
+if not os.path.exists(STATIC_FOLDER):
+    # Fallback: check for dist in root
+    STATIC_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dist')
+    
+logger.info(f"Static folder path: {STATIC_FOLDER} (exists: {os.path.exists(STATIC_FOLDER)})")
+
+app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='')
 CORS(app, origins=["*"])
 
 @app.route('/health', methods=['GET'])
@@ -924,6 +933,18 @@ def process_youtube():
         logger.error(error_msg)
         return jsonify({"error": error_msg, "jobId": data.get('jobId')}), 500
 
+# Serve React frontend - catch-all route for SPA
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve the React SPA - returns index.html for all non-API routes."""
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
 if __name__ == "__main__":
-    print("\nAI Service Started - Port 8000\n")
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    # Use PORT env var for Render, default to 8000 for local dev
+    port = int(os.getenv('PORT', 8000))
+    print(f"\nAI Service Started - Port {port}\n")
+    app.run(host="0.0.0.0", port=port, debug=False)
