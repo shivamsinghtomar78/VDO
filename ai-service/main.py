@@ -7,7 +7,7 @@ import requests
 import json
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
-import assemblyai as aai
+
 import subprocess
 import tempfile
 import random
@@ -34,10 +34,7 @@ logger = logging.getLogger(__name__)
 DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 FREEPIK_API_KEY = os.getenv('FREEPIK_API_KEY')
-ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY', '9b09c36cddf44b3297e0ff9d92a5e0a2')
 
-# Configure AssemblyAI
-aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 # Log available APIs on startup
 if DEEPGRAM_API_KEY:
@@ -119,22 +116,17 @@ def upload_video():
         
         try:
             # Process the video directly (transcription + blog generation)
-            # Step 1: Transcribe video (try AssemblyAI first, then Deepgram as fallback)
-            transcription_result = transcribe_with_assemblyai(video_path)
+            # Step 1: Transcribe video using Deepgram
+            transcription_result = transcribe_with_deepgram(video_path)
             transcript = transcription_result.get('text')
             transcription_warning = None
             
             if not transcription_result.get('success'):
-                logger.warning(f"AssemblyAI failed: {transcription_result.get('error')}, trying Deepgram...")
-                transcription_result = transcribe_with_deepgram(video_path)
-                transcript = transcription_result.get('text')
-                
-                if not transcription_result.get('success'):
-                    transcription_warning = transcription_result.get('error')
-                    if transcription_result.get('mock'):
-                        transcript = "Sample transcript (APIs not configured)"
-                    else:
-                        transcript = "Sample transcript (transcription failed)"
+                transcription_warning = transcription_result.get('error')
+                if transcription_result.get('mock'):
+                    transcript = "Sample transcript (DEEPGRAM_API_KEY not configured)"
+                else:
+                    transcript = "Sample transcript (transcription failed)"
             
             # Step 2: Generate blog summary (Medium style)
             blog_generation_result = generate_summary_with_openrouter(transcript)
