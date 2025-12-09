@@ -13,6 +13,18 @@ import tempfile
 import random
 import time
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    from youtube_transcript_api.proxies import WebshareProxyConfig, GenericProxyConfig
+    PROXY_SUPPORT = True
+except ImportError:
+    # logger is not initialized yet, but we can print to stderr
+    sys.stderr.write("WARNING: youtube_transcript_api.proxies not found. Proxy support disabled.\n")
+    PROXY_SUPPORT = False
+    class WebshareProxyConfig: pass
+    class GenericProxyConfig: pass
+
 
 load_dotenv()
 
@@ -266,9 +278,11 @@ BLOG_TEMPLATES = {
         "structure": "Engaging Hook, Core Narrative/Argument, Key Insights (using subheaders), Practical Takeaways, Thought-Provoking Conclusion"
     },
     "medium": { # Alias for standard
-        "name": "Medium Style Blog",
+        "name": "Long-Form Medium Style Blog",
         "prompt": """
-        Write a high-quality, engaging "Medium-style" blog post based on this transcript.
+        Write a VERY LONG, COMPREHENSIVE, and DETAILED "Medium-style" blog post based on this transcript.
+        
+        GOAL: Create a deep-dive article that fully explores the topic. Aim for 2000+ words if potential exists.
         
         TONE & STYLE:
         - Write like a smart friend explaining a complex topic: clear, direct, and conversational.
@@ -276,13 +290,19 @@ BLOG_TEMPLATES = {
         - Focus on storytelling and flow.
         - Use short paragraphs and vary sentence length for rhythm.
         
+        CONTENT INSTRUCTIONS:
+        - Expand significantly on every key point. Do not just summarize; explain, analyze, and provide examples.
+        - If the transcript touches on a concept, define it and explore its implications.
+        - Use analogies and metaphors to make complex ideas easier to understand.
+        - Ensure the content is "meaty" and provides high value to the reader.
+        
         CRITICAL FORMATTING RULES:
         - DO NOT include an "Author Profile", "Bio", "Date", or "Time" anywhere.
         - DO NOT include a "Title", "H1", or "H2" in the content body (the title is a separate field).
         - Start directly with a strong hook/introduction.
         - Use formatting like bolding for emphasis, but don't overdo it.
         """,
-        "structure": "Engaging Hook, Core Narrative/Argument, Key Insights (using subheaders), Practical Takeaways, Thought-Provoking Conclusion"
+        "structure": "Engaging Hook, Core Narrative/Argument (Deep Dive), Detailed Key Insights (multiple extensive subheaders), Practical Takeaways, Thought-Provoking Conclusion"
     }
 }
 
@@ -317,11 +337,11 @@ def generate_summary_with_openrouter(transcript: str, template: str = "medium") 
                     "content": f"""{template_prompt} Structure it as: {template_structure}
 
 Return ONLY valid JSON with no escape characters or special formatting:
-{{"title":"Attactive Blog Title (No 'Blog' in name)","sections":[{{"heading":"Section Heading","content":"Content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"],"seoScore":85,"readabilityScore":"Good"}}}}
+{{"title":"Attactive Blog Title (No 'Blog' in name)","sections":[{{"heading":"Section Heading","content":"Extensive content here"}}],"seo":{{"title":"SEO Title","metaDescription":"Description","keywords":["key1"],"seoScore":85,"readabilityScore":"Good"}}}}
 
 Important: Do not use backslashes or special escape sequences in your response.
 
-Transcript: {transcript[:3000]}"""
+Transcript: {transcript[:30000]}"""
                 }],
                 "temperature": 0.7,
             },
@@ -411,7 +431,7 @@ def generate_mystic_image(prompt: str) -> str:
         logger.info(f"Mystic task started: {task_id}")
         
         # Poll for completion
-        max_retries = 60 # Increased to 60 seconds
+        max_retries = 300 # Increased to 300 seconds (5 minutes)
         for i in range(max_retries):
             time.sleep(1) # Wait 1 second between checks
             
@@ -455,75 +475,66 @@ def generate_mystic_image(prompt: str) -> str:
         return None
 
 def generate_image_suggestions(sections: list, blog_title: str = "") -> list:
-    """Generate multiple image suggestions (Hero + 2 section images)."""
+    """Generate multiple image suggestions (Hero + 2 section images) in parallel."""
     suggestions = []
     
-    # 1. Hero Image
-    hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting, photorealistic" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
-    logger.info("Generating Hero Image...")
-    hero_image = generate_mystic_image(hero_prompt)
-    
-    if hero_image:
-        suggestions.append({
-            "section": "Hero", 
-            "prompt": hero_prompt, 
-            "imageUrl": hero_image,
+    # Define tasks
+    def generate_hero():
+        hero_prompt = f"cinematic photography of {blog_title}, professional, 4k, ultra detailed, dramatic lighting, photorealistic" if blog_title else "cinematic photography of a modern professional workspace, 4k, detailed"
+        logger.info("Generating Hero Image...")
+        image = generate_mystic_image(hero_prompt)
+        return {
+            "section": "Hero",
+            "prompt": hero_prompt,
+            "imageUrl": image if image else "https://placehold.co/1200x600?text=Hero+Image+Generation+Failed",
             "type": "hero"
-        })
-    else:
-        suggestions.append({
-            "section": "Hero", 
-            "prompt": hero_prompt, 
-            "imageUrl": "https://placehold.co/1200x600?text=Hero+Image+Generation+Failed",
-            "type": "hero"
-        })
+        }
 
-    # 2. Section Image (from the second section if available, else first)
-    if sections and len(sections) > 0:
-        # Use 2nd section if available, else 1st
-        target_section = sections[1] if len(sections) > 1 else sections[0]
-        heading = target_section.get('heading', 'Topic')
-        section_prompt = f"editorial photography representing {heading}, minimal, clean, professional medium style, high quality"
-        
-        logger.info(f"Generating Section Image for: {heading}...")
-        section_image = generate_mystic_image(section_prompt)
-        
-        if section_image:
-             suggestions.append({
-                "section": heading, 
-                "prompt": section_prompt, 
-                "imageUrl": section_image,
+    def generate_section():
+        if sections and len(sections) > 0:
+            target_section = sections[1] if len(sections) > 1 else sections[0]
+            heading = target_section.get('heading', 'Topic')
+            section_prompt = f"editorial photography representing {heading}, minimal, clean, professional medium style, high quality"
+            logger.info(f"Generating Section Image for: {heading}...")
+            image = generate_mystic_image(section_prompt)
+            return {
+                "section": heading,
+                "prompt": section_prompt,
+                "imageUrl": image if image else "https://placehold.co/1200x600?text=Section+Image+Failed",
                 "type": "section"
-            })
-        else:
-             # Fallback
-             suggestions.append({
-                "section": heading, 
-                "prompt": section_prompt, 
-                "imageUrl": "https://placehold.co/1200x600?text=Section+Image+Failed",
-                "type": "section"
-            })
+            }
+        return None
 
-    # 3. Conclusion/Abstract Image
-    conclusion_prompt = "abstract artistic representation of future technology and success, minimal, elegant, soft lighting, 4k"
-    logger.info("Generating Conclusion Image...")
-    conclusion_image = generate_mystic_image(conclusion_prompt)
-    
-    if conclusion_image:
-        suggestions.append({
-            "section": "Footer", 
-            "prompt": conclusion_prompt, 
-            "imageUrl": conclusion_image,
+    def generate_footer():
+        conclusion_prompt = "abstract artistic representation of future technology and success, minimal, elegant, soft lighting, 4k"
+        logger.info("Generating Conclusion Image...")
+        image = generate_mystic_image(conclusion_prompt)
+        return {
+            "section": "Footer",
+            "prompt": conclusion_prompt,
+            "imageUrl": image if image else "https://placehold.co/1200x600?text=Footer+Image+Failed",
             "type": "footer"
-        })
-    else:
-        # Fallback
-        suggestions.append({
-            "section": "Footer", 
-            "prompt": conclusion_prompt, 
-            "imageUrl": "https://placehold.co/1200x600?text=Footer+Image+Failed",
-            "type": "footer"
-        })
+        }
+
+    # Execute in parallel
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(generate_hero),
+            executor.submit(generate_section),
+            executor.submit(generate_footer)
+        ]
+        
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                if result:
+                    suggestions.append(result)
+            except Exception as e:
+                logger.error(f"Image generation task failed: {e}")
+
+    # Sort suggestions to maintain order (Hero, Section, Footer)
+    type_order = {"hero": 0, "section": 1, "footer": 2}
+    suggestions.sort(key=lambda x: type_order.get(x["type"], 99))
     
     return suggestions
 
@@ -751,7 +762,7 @@ def process_video():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []), blog_data.get("title", "")),
+            "imageSuggestions": [], # Image generation disabled by user request
             "socialSnippets": generate_social_snippets(blog_data),
             "availableExports": ["markdown", "html", "wordpress"]
         }
@@ -797,15 +808,26 @@ def transcribe_youtube(video_id: str) -> dict:
     
     # Method 1: Try with youtube-transcript-api (with Proxy Support)
     try:
+
         # Configure proxy if available
+        webshare_username = os.getenv('WEBSHARE_PROXY_USERNAME')
+        webshare_password = os.getenv('WEBSHARE_PROXY_PASSWORD')
         proxies = os.getenv('PROXY_LIST', '').split(',')
         proxies = [p.strip() for p in proxies if p.strip()]
         
         ytt_api = None
-        if proxies:
+        
+        if PROXY_SUPPORT and webshare_username and webshare_password:
+            logger.info("Using Webshare proxy configuration")
+            proxy_config = WebshareProxyConfig(
+                proxy_username=webshare_username,
+                proxy_password=webshare_password
+            )
+            ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+        elif PROXY_SUPPORT and proxies:
             from youtube_transcript_api.proxies import GenericProxyConfig
             proxy_url = random.choice(proxies)
-            logger.info(f"Using proxy for youtube-transcript-api: {proxy_url}")
+            logger.info(f"Using generic proxy for youtube-transcript-api: {proxy_url}")
             
             # Identify protocol
             http_proxy = proxy_url
@@ -820,6 +842,8 @@ def transcribe_youtube(video_id: str) -> dict:
             )
             ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
         else:
+            if (webshare_username or proxies) and not PROXY_SUPPORT:
+                logger.warning("Proxy configuration detected but youtube_transcript_api doesn't support proxies. Falling back to direct connection.")
             ytt_api = YouTubeTranscriptApi()
 
         # Try multiple languages
@@ -832,21 +856,47 @@ def transcribe_youtube(video_id: str) -> dict:
         # 1.1 Try direct fetch
         for langs in languages_to_try:
             try:
-                transcript_data = ytt_api.get_transcript(video_id, languages=langs)
-                full_text = ' '.join([segment['text'] for segment in transcript_data])
+                # v1.2.3 uses .fetch() instead of .get_transcript()
+                transcript_data = ytt_api.fetch(video_id, languages=langs)
+                
+                # Handle FetchedTranscript object if returned (it's iterable)
+                # content is objects, need to access .text attribute?
+                # User docs say: "This object implements most interfaces of a List ... for snippet in fetched_transcript: print(snippet.text)"
+                full_text = ""
+                for snippet in transcript_data:
+                     # Access .text attribute if it's an object, or key if it's a dict (fallback)
+                     text = getattr(snippet, 'text', None)
+                     if text is None and isinstance(snippet, dict):
+                         text = snippet.get('text')
+                     if text:
+                        full_text += text + " "
+
                 if full_text.strip():
                     logger.info(f"✓ YouTube transcript fetched (API): {len(full_text)} chars")
                     return {'success': True, 'text': full_text, 'error': None}
-            except Exception:
+            except Exception as e:
+                # logger.warning(f"Fetch failed for langs {langs}: {e}")
                 continue
                 
         # 1.2 Try listing transcripts
         try:
-            transcript_list = ytt_api.list_transcripts(video_id)
+            # v1.2.3 uses .list() instead of .list_transcripts()
+            transcript_list = ytt_api.list(video_id)
+            
+            # Iterate and find suitable transcript
             for transcript in transcript_list:
                 try:
-                    transcript_data = transcript.fetch()
-                    full_text = ' '.join([segment['text'] for segment in transcript_data])
+                    # User docs: transcript.fetch() returns FetchedTranscript object
+                    fetched_transcript = transcript.fetch()
+                    
+                    full_text = ""
+                    for snippet in fetched_transcript:
+                         text = getattr(snippet, 'text', None)
+                         if text is None and isinstance(snippet, dict):
+                             text = snippet.get('text')
+                         if text:
+                            full_text += text + " "
+                            
                     if full_text.strip():
                         logger.info(f"✓ YouTube transcript fetched (List): {len(full_text)} chars")
                         return {'success': True, 'text': full_text, 'error': None}
@@ -878,12 +928,20 @@ def transcribe_youtube(video_id: str) -> dict:
             ]
             
             # Add proxy if configured
+            webshare_username = os.getenv('WEBSHARE_PROXY_USERNAME')
+            webshare_password = os.getenv('WEBSHARE_PROXY_PASSWORD')
             proxies = os.getenv('PROXY_LIST', '').split(',')
             proxies = [p.strip() for p in proxies if p.strip()]
-            if proxies:
+            
+            if webshare_username and webshare_password:
+                # Webshare standard rotating proxy endpoint
+                proxy_url = f"http://{webshare_username}:{webshare_password}@p.webshare.io:80"
+                cmd.extend(['--proxy', proxy_url])
+                logger.info("Using Webshare proxy for yt-dlp")
+            elif proxies:
                 proxy = random.choice(proxies)
                 cmd.extend(['--proxy', proxy])
-                logger.info(f"Using proxy for yt-dlp: {proxy}")
+                logger.info(f"Using generic proxy for yt-dlp: {proxy}")
             
             # Run yt-dlp
             result = subprocess.run(
@@ -987,7 +1045,7 @@ def process_youtube():
                 "seoScore": seo_data.get("seoScore", 75),
                 "readabilityScore": seo_data.get("readabilityScore", "Good")
             },
-            "imageSuggestions": generate_image_suggestions(blog_data.get("sections", []), blog_data.get("title", "")),
+            "imageSuggestions": [], # Image generation disabled by user request
             "socialSnippets": generate_social_snippets(blog_data),
             "availableExports": ["markdown", "html", "wordpress"]
         }
